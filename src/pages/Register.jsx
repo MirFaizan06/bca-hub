@@ -4,7 +4,7 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "../utils/firebase";
 import { motion } from "framer-motion";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { Loader2, ArrowRight } from "lucide-react";
+import { Loader2, ArrowRight, Check, X } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Register() {
@@ -17,22 +17,50 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [batch, setBatch] = useState("");
   const [loading, setLoading] = useState(false);
+  const [passwordChecks, setPasswordChecks] = useState({
+    length: false,
+    uppercase: false,
+    alphanumeric: true,
+  });
 
   useEffect(() => {
     document.title = "BCA Hub | Register";
   }, []);
 
+  const handlePasswordChange = (value) => {
+    setPassword(value);
+    setPasswordChecks({
+      length: value.length >= 8,
+      uppercase: /[A-Z]/.test(value),
+      alphanumeric: /^[a-zA-Z0-9]*$/.test(value)
+    });
+  };
+
+  const isPasswordValid = () => {
+    return passwordChecks.length && 
+           passwordChecks.uppercase && 
+           passwordChecks.alphanumeric;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    const trimmedRoll = roll.trim();
+    const trimmedRoll = roll.trim().toLowerCase();
     const trimmedName = name.trim();
-    const trimmedPwd = password.trim();
+    const trimmedPwd = password;
     const trimmedBatch = batch.trim();
 
+    // Validate all fields
     if (!trimmedRoll || !trimmedName || !trimmedPwd || !trimmedBatch) {
       toast.error("All fields are required");
+      setLoading(false);
+      return;
+    }
+
+    // Validate password strength
+    if (!isPasswordValid()) {
+      toast.error("Password doesn't meet requirements");
       setLoading(false);
       return;
     }
@@ -42,7 +70,7 @@ export default function Register() {
     const userRef = doc(db, "users", trimmedRoll);
 
     try {
-      // Check if Firestore document already exists under "users/<roll>"
+      // Check if user document already exists
       const userSnap = await getDoc(userRef);
       if (userSnap.exists()) {
         toast.error("Roll number already registered");
@@ -50,7 +78,7 @@ export default function Register() {
         return;
       }
 
-      // Try creating a Firebase Auth user
+      // Create Firebase Auth user
       let userCredential;
       try {
         userCredential = await createUserWithEmailAndPassword(auth, email, trimmedPwd);
@@ -65,7 +93,7 @@ export default function Register() {
 
       const { uid } = userCredential.user;
 
-      // Now create Firestore document under "users/<roll>"
+      // Create Firestore user document
       await setDoc(userRef, {
         uid: uid,
         name: trimmedName,
@@ -100,6 +128,37 @@ export default function Register() {
       setLoading(false);
     }
   };
+
+  const PasswordStrengthIndicator = () => (
+    <div className="mt-2">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
+        Password must contain:
+      </p>
+      <ul className="space-y-1">
+        <li className={`flex items-center text-xs ${passwordChecks.length ? 'text-green-500' : 'text-zinc-500 dark:text-zinc-400'}`}>
+          {passwordChecks.length ? 
+            <Check className="h-4 w-4 mr-1.5" /> : 
+            <X className="h-4 w-4 mr-1.5" />
+          }
+          At least 8 characters
+        </li>
+        <li className={`flex items-center text-xs ${passwordChecks.uppercase ? 'text-green-500' : 'text-zinc-500 dark:text-zinc-400'}`}>
+          {passwordChecks.uppercase ? 
+            <Check className="h-4 w-4 mr-1.5" /> : 
+            <X className="h-4 w-4 mr-1.5" />
+          }
+          At least one uppercase letter
+        </li>
+        <li className={`flex items-center text-xs ${passwordChecks.alphanumeric ? 'text-green-500' : 'text-amber-500 dark:text-amber-400'}`}>
+          {passwordChecks.alphanumeric ? 
+            <Check className="h-4 w-4 mr-1.5" /> : 
+            <X className="h-4 w-4 mr-1.5" />
+          }
+          Alphanumeric characters only
+        </li>
+      </ul>
+    </div>
+  );
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-indigo-50 via-white to-blue-50 dark:from-zinc-900 dark:via-zinc-950 dark:to-zinc-900 flex items-center justify-center px-4">
@@ -246,7 +305,7 @@ export default function Register() {
                   name="password"
                   type="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => handlePasswordChange(e.target.value)}
                   required
                   className="w-full bg-zinc-50 dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 rounded-lg py-3 px-4 pl-11 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   placeholder="Create a password"
@@ -266,9 +325,7 @@ export default function Register() {
                   </svg>
                 </div>
               </div>
-              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                Use 8+ characters with a mix of letters, numbers & symbols
-              </p>
+              <PasswordStrengthIndicator />
             </div>
 
             <div>
