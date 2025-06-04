@@ -12,7 +12,10 @@ import {
   Trophy,
   RefreshCw,
   Home,
-  AlertCircle
+  AlertCircle,
+  ChevronLeft,
+  LayoutGrid,
+  LibraryBig
 } from "lucide-react";
 import { toast } from "sonner";
 import { db, auth } from "../utils/firebase";
@@ -44,6 +47,7 @@ export default function MockTests() {
   const [topics, setTopics] = useState([]);
   const [selectedTopicId, setSelectedTopicId] = useState(null);
   const [loadingTopics, setLoadingTopics] = useState(true);
+  const [topicError, setTopicError] = useState("");
   const timerRef = useRef(null);
 
   // On auth state changed
@@ -58,7 +62,7 @@ export default function MockTests() {
       }
       const email = currentUser.email || "";
       const roll = email.split("@")[0];
-      setUser({ uid: roll });
+      setUser({ uid: currentUser.uid, roll: roll.toLowerCase() });
       setLoading(false);
     });
     return () => unsubscribe();
@@ -74,10 +78,16 @@ export default function MockTests() {
           id: doc.id, 
           ...doc.data() 
         }));
-        setTopics(topicsData);
+        
+        if (topicsData.length === 0) {
+          setTopicError("No mock test topics available");
+        } else {
+          setTopics(topicsData);
+        }
       } catch (err) {
         console.error("Error fetching topics:", err);
         toast.error("Failed to load topics");
+        setTopicError("Failed to load topics. Please try again later.");
       } finally {
         setLoadingTopics(false);
       }
@@ -102,6 +112,12 @@ export default function MockTests() {
       // Fetch questions for selected topic
       const questionsCol = collection(db, `mockTestTopics/${selectedTopicId}/questions`);
       const questionsSnapshot = await getDocs(questionsCol);
+      
+      if (questionsSnapshot.empty) {
+        toast.error("No questions available for this topic");
+        return;
+      }
+      
       let questions = questionsSnapshot.docs.map(doc => ({ 
         id: doc.id, 
         ...doc.data() 
@@ -196,15 +212,22 @@ export default function MockTests() {
     if (user) {
       try {
         const selectedTopic = topics.find(t => t.id === selectedTopicId);
-        await setDoc(doc(collection(db, "mocktests"), `${user.uid}_${Date.now()}`), {
+        if (!selectedTopic) {
+          throw new Error("Selected topic not found");
+        }
+        
+        // Include rollNumber in lowercase to match Firestore rules
+        await setDoc(doc(collection(db, "mocktests")), {
           uid: user.uid,
+          rollNumber: user.roll, // Required by Firestore rules
           topicId: selectedTopicId,
-          topicName: selectedTopic?.name || "Unknown",
+          topicName: selectedTopic.name,
           score: correctCount,
           total: questionSet.length,
           percentage: (correctCount / questionSet.length) * 100,
           createdAt: Timestamp.now(),
         });
+        
         toast.success("Your result has been saved.");
       } catch (error) {
         console.error("Error saving mock test result:", error);
@@ -294,50 +317,78 @@ export default function MockTests() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.5 }}
-            className="flex flex-col items-center justify-center min-h-screen px-4 py-8"
+            className="flex flex-col items-center min-h-screen px-4 py-8 w-full"
           >
-            <div className="bg-white dark:bg-zinc-800 rounded-3xl shadow-xl p-8 max-w-lg w-full text-center">
-              <h2 className="text-2xl font-bold mb-6">Select Test Topic</h2>
+            <div className="w-full max-w-4xl">
+              <div className="flex items-center justify-between mb-8">
+                <button 
+                  onClick={() => setScreen("intro")}
+                  className="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                >
+                  <ChevronLeft size={20} /> Back
+                </button>
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  <LayoutGrid size={24} className="text-blue-600 dark:text-blue-400" />
+                  Select Test Topic
+                </h2>
+                <div></div> {/* Spacer */}
+              </div>
               
               {loadingTopics ? (
-                <div className="py-8">
+                <div className="py-16 flex flex-col items-center">
                   <div className="w-16 h-16 border-t-4 border-blue-600 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
                   <p>Loading topics...</p>
                 </div>
-              ) : topics.length === 0 ? (
-                <div className="py-8">
+              ) : topicError ? (
+                <div className="py-16 flex flex-col items-center">
                   <div className="bg-orange-100 dark:bg-orange-900/30 p-4 rounded-full inline-block mb-4">
                     <AlertCircle className="text-orange-600 dark:text-orange-400" size={32} />
                   </div>
-                  <p className="text-zinc-600 dark:text-zinc-300">
-                    No mock test topics available
+                  <p className="text-zinc-600 dark:text-zinc-300 text-center mb-6">
+                    {topicError}
                   </p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-medium py-2 px-6 rounded-full shadow-md hover:shadow-lg transition-all"
+                  >
+                    Try Again
+                  </button>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {topics.map(topic => (
-                    <motion.button
+                    <motion.div
                       key={topic.id}
-                      whileHover={{ scale: 1.03 }}
+                      whileHover={{ scale: 1.03, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => {
                         setSelectedTopicId(topic.id);
                         setScreen("instructions");
                       }}
-                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-medium py-3 px-6 rounded-full shadow-md hover:shadow-lg transition-all"
+                      className="bg-white dark:bg-zinc-800 rounded-2xl shadow-md border border-zinc-200 dark:border-zinc-700 overflow-hidden cursor-pointer transition-all"
                     >
-                      {topic.name}
-                    </motion.button>
+                      <div className="bg-gradient-to-r from-blue-500 to-indigo-600 dark:from-blue-700 dark:to-indigo-800 h-32 flex items-center justify-center">
+                        <LibraryBig className="text-white" size={48} />
+                      </div>
+                      <div className="p-6">
+                        <h3 className="text-xl font-bold mb-2">{topic.name}</h3>
+                        <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-sm mb-4">
+                          <BookOpen size={16} />
+                          <span>{topic.questionCount || "Multiple"} questions</span>
+                        </div>
+                        <p className="text-zinc-600 dark:text-zinc-300 text-sm line-clamp-2">
+                          {topic.description || "Test your knowledge on this subject"}
+                        </p>
+                        <div className="mt-4 flex justify-end">
+                          <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs px-3 py-1 rounded-full">
+                            Start Test
+                          </span>
+                        </div>
+                      </div>
+                    </motion.div>
                   ))}
                 </div>
               )}
-              
-              <button
-                onClick={() => setScreen("intro")}
-                className="mt-8 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 py-3 px-6 rounded-lg transition"
-              >
-                Back
-              </button>
             </div>
           </motion.div>
         )}
@@ -353,10 +404,19 @@ export default function MockTests() {
             className="flex flex-col items-center justify-center min-h-screen px-4 py-8"
           >
             <div className="bg-white dark:bg-zinc-800 rounded-3xl shadow-xl p-8 max-w-xl w-full">
-              <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                <BookOpen className="text-blue-600 dark:text-blue-400" size={24} />
-                Test Instructions
-              </h2>
+              <div className="flex items-center justify-between mb-6">
+                <button 
+                  onClick={() => setScreen("topicSelection")}
+                  className="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                >
+                  <ChevronLeft size={20} /> Back
+                </button>
+                <h2 className="text-2xl font-bold flex items-center gap-3">
+                  <BookOpen className="text-blue-600 dark:text-blue-400" size={24} />
+                  Test Instructions
+                </h2>
+                <div></div> {/* Spacer */}
+              </div>
               
               <div className="space-y-6">
                 <div className="flex items-start gap-4">
@@ -417,7 +477,7 @@ export default function MockTests() {
                   onClick={() => setScreen("topicSelection")}
                   className="flex-1 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 font-medium py-3 px-6 rounded-lg transition"
                 >
-                  Back
+                  Choose Different Topic
                 </button>
                 <button
                   onClick={startQuiz}
