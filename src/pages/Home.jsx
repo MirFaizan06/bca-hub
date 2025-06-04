@@ -175,7 +175,7 @@ export default function Home() {
           <section className="py-8">
             <div className="max-w-6xl mx-auto">
               <div className="flex items-center gap-3 mb-10">
-                <div className="w-10 h-0.5 bg-blue-600 dark:bg-blue-500"></div>
+                <div className="w-10 h-0.5 bg-blue-600 dark:bg-blue-400"></div>
                 <h2 className="text-2xl font-bold text-blue-600 dark:text-blue-400">Our Impact</h2>
               </div>
               
@@ -264,11 +264,25 @@ export default function Home() {
                     <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg">
                       <Bell className="text-blue-600 dark:text-blue-400" size={20} />
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <h3 className="text-lg font-bold">{latestAnnouncement.title}</h3>
-                      <p className="mt-2 text-zinc-600 dark:text-zinc-300">
+                      <div
+                        className="mt-2 text-zinc-600 dark:text-zinc-300"
+                        style={{
+                          display: "-webkit-box",
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
                         {latestAnnouncement.description}
-                      </p>
+                      </div>
+                      <Link
+                        to="/announcements"
+                        className="mt-2 inline-block text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                      >
+                        Read more in announcements section
+                      </Link>
                       <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
                         <span>Posted:</span>
                         <span className="font-medium">
@@ -279,12 +293,6 @@ export default function Home() {
                       </p>
                     </div>
                   </div>
-                  <Link
-                    to="/announcements"
-                    className="block mt-4 text-center text-blue-600 dark:text-blue-400 hover:underline font-medium"
-                  >
-                    View all announcements
-                  </Link>
                 </div>
               ) : (
                 <div className="text-center py-8">
