@@ -1,0 +1,6 @@
+now works.
+now as you added announcements and community, make jsx for it.
+for announcements, it reads from firestore but for community, it also  reads fom firestore
+community will have:
+list of users registered and there most recent performance in mocktest.
+it will be ordered by best one on top.
