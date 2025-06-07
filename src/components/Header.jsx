@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Moon, Sun, Menu, X, LogOut, BookOpen, Bell, Users } from "lucide-react";
+import { Moon, Sun, Menu, X, LogOut, BookOpen, Bell, Users, Clipboard } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const navLinks = [
   { to: "/", label: "Home", icon: null },
   { to: "/resources", label: "Resources", icon: <BookOpen size={16} /> },
-  { to: "/mock-tests", label: "Mock Tests", icon: null },
+  { to: "/mock-tests", label: "Mock Tests", icon: <Clipboard size={16} /> },
   { to: "/announcements", label: "Announcements", icon: <Bell size={16} /> },
   { to: "/community", label: "Community", icon: <Users size={16} /> },
   { to: "/chats", label: "Chat Room", icon: null },

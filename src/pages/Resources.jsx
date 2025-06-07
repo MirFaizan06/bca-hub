@@ -23,9 +23,11 @@ import { motion, AnimatePresence } from "framer-motion";
 export default function Resources() {
   // Study Groups array for easy updates
   const studyGroups = [
+    { name: "BCA 2nd Semester (Official Group)", link: "#" },
     { name: "BCA Semester 2 - Notes", link: "https://chat.whatsapp.com/HUILL4k1TVc5VSKQFf5PM5" },
     { name: "BCA Semester 2 - Exam Prep.", link: "https://chat.whatsapp.com/DUiPFoOzmfr48Phtz97puP" },
     { name: "Programming Help (added later)", link: "#" },
+    
   ];
 
   const [resources, setResources] = useState([]);

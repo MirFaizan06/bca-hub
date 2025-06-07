@@ -19,6 +19,7 @@ import Chats from "./pages/Chats";
 import Register from "./pages/Register";
 import Community from "./pages/Community";
 import Announcements from "./pages/Announcements";
+import Attendance from "./pages/Attendance";
 
 function App() {
   return (
@@ -85,6 +86,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <Announcements />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/attendance"
+            element={
+              <ProtectedRoute requireAdmin={true}>
+                <Attendance />
               </ProtectedRoute>
             }
           />
