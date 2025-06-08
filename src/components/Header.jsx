@@ -3,7 +3,13 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { 
   Moon, Sun, Menu, X, LogOut, BookOpen, Bell, Users, 
   Clipboard, LayoutDashboard, Calendar, BarChart, 
-  ChevronDown, ChevronUp, User, Bookmark, MessageSquare 
+  ChevronDown, ChevronUp, User, Bookmark, MessageSquare, 
+  FileBadge,
+  FileBadge2,
+  Home,
+  Contact2,
+  Contact,
+  Phone
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -67,22 +73,6 @@ export default function Header() {
   // Navigation groups
   const navGroups = [
     {
-      name: "user",
-      label: user ? "My Account" : "Account",
-      icon: user ? <User size={16} /> : <User size={16} />,
-      links: [
-        ...(user ? [
-          { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} /> },
-          { to: "/progress", label: "Progress", icon: <BarChart size={16} /> },
-          { to: "/schedule", label: "Schedule", icon: <Calendar size={16} /> },
-          { to: "/attendance", label: "Attendance", icon: <Bookmark size={16} /> },
-        ] : []),
-        user 
-          ? { label: "Logout", action: handleLogout, icon: <LogOut size={16} /> }
-          : { to: "/login", label: "Login", icon: null }
-      ]
-    },
-    {
       name: "community",
       label: "Community",
       icon: <Users size={16} />,
@@ -91,15 +81,33 @@ export default function Header() {
         { to: "/community", label: "Community Hub", icon: <Users size={16} /> },
         { to: "/chats", label: "Chat Room", icon: <MessageSquare size={16} /> },
       ]
-    }
+    },
+    
+    {
+      name: "user",
+      label: user ? "My Account" : "Account",
+      icon: user ? <User size={16} /> : <User size={16} />,
+      links: [
+        ...(user ? [
+          { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} /> },
+          { to: "/progress", label: "Progress", icon: <BarChart size={16} /> },
+          { to: "/schedule", label: "Schedule", icon: <Calendar size={16} /> },
+          { to: "/achievements", label: "Achievements", icon: <FileBadge2 size={16} /> },
+          { to: "/attendance", label: "Attendance", icon: <Bookmark size={16} /> },
+        ] : []),
+        user 
+          ? { label: "Logout", action: handleLogout, icon: <LogOut size={16} /> }
+          : { to: "/login", label: "Login", icon: null }
+      ]
+    },
   ];
 
   // Regular navigation links
   const navLinks = [
-    { to: "/", label: "Home", icon: null },
+    { to: "/", label: "Home", icon: <Home size={16} /> },
     { to: "/resources", label: "Resources", icon: <BookOpen size={16} /> },
     { to: "/mock-tests", label: "Mock Tests", icon: <Clipboard size={16} /> },
-    { to: "/contact", label: "Contact", icon: null },
+    { to: "/contact", label: "Contact", icon: <Phone size={16} /> },
   ];
 
   return (
@@ -113,9 +121,8 @@ export default function Header() {
         <Link to="/" className="flex items-center gap-2">
           {/* Logo image option */}
           <div className="flex items-center">
-            {/* Uncomment when you have logo */}
             {/* <img 
-              src="/logo.png" 
+              src="/bca-hub-logo.png" 
               alt="BCA Hub Logo" 
               className="h-8 w-auto mr-2"
             /> */}

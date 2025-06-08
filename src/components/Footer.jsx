@@ -8,13 +8,14 @@ import {
   Users, 
   MessageCircle, 
   Mail, 
-  GraduationCap 
+  GraduationCap, 
+  Calendar
 } from "lucide-react";
 
 const footerLinks = [
   { to: "/", label: "Home", icon: <Home size={16} /> },
   { to: "/resources", label: "Resources", icon: <GraduationCap size={16} /> },
-  { to: "/notes", label: "Notes", icon: <BookOpen size={16} /> },
+  { to: "/schedule", label: "Schedule", icon: <Calendar size={16} /> },
   { to: "/mock-tests", label: "Mock Tests", icon: <FileText size={16} /> },
   { to: "/announcements", label: "Announcements", icon: <Bell size={16} /> },
   { to: "/community", label: "Community", icon: <Users size={16} /> },

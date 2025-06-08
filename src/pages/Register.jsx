@@ -4,7 +4,7 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "../utils/firebase";
 import { motion } from "framer-motion";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { Loader2, ArrowRight, Check, X } from "lucide-react";
+import { Loader2, ArrowRight, Check, X, Eye, EyeOff, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Register() {
@@ -22,6 +22,9 @@ export default function Register() {
     uppercase: false,
     alphanumeric: true,
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [securityQuestion, setSecurityQuestion] = useState("");
+  const [securityAnswer, setSecurityAnswer] = useState("");
 
   useEffect(() => {
     document.title = "BCA Hub | Register";
@@ -50,9 +53,11 @@ export default function Register() {
     const trimmedName = name.trim();
     const trimmedPwd = password;
     const trimmedBatch = batch.trim();
+    const trimmedQuestion = securityQuestion.trim();
+    const trimmedAnswer = securityAnswer.trim().toLowerCase(); // Normalize answer
 
     // Validate all fields
-    if (!trimmedRoll || !trimmedName || !trimmedPwd || !trimmedBatch) {
+    if (!trimmedRoll || !trimmedName || !trimmedPwd || !trimmedBatch || !trimmedQuestion || !trimmedAnswer) {
       toast.error("All fields are required");
       setLoading(false);
       return;
@@ -103,6 +108,8 @@ export default function Register() {
         batch: trimmedBatch,
         registeredAt: new Date(),
         pfpUrl: `/dps/dp${Math.floor(Math.random() * 10) + 1}.png`,
+        securityQuestion: trimmedQuestion,
+        securityAnswer: trimmedAnswer, // Store normalized answer
       });
 
       if (isSuperAdmin) {
@@ -303,29 +310,62 @@ export default function Register() {
                 <input
                   id="password"
                   name="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => handlePasswordChange(e.target.value)}
                   required
                   className="w-full bg-zinc-50 dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 rounded-lg py-3 px-4 pl-11 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   placeholder="Create a password"
                 />
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 text-zinc-500"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer" onClick={() => setShowPassword(!showPassword)}>
+                  {showPassword ? <EyeOff className="h-5 w-5 text-zinc-500" /> : <Eye className="h-5 w-5 text-zinc-500" />}
                 </div>
               </div>
               <PasswordStrengthIndicator />
+            </div>
+
+            <div>
+              <div className="flex items-center mb-1">
+                <label
+                  htmlFor="securityQuestion"
+                  className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Security Question
+                </label>
+                <div className="group relative ml-2">
+                  <HelpCircle className="h-4 w-4 text-zinc-400" />
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 p-2 text-xs text-white bg-zinc-800 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    This will be used to verify your identity if you forget your password
+                  </div>
+                </div>
+              </div>
+              <input
+                id="securityQuestion"
+                name="securityQuestion"
+                value={securityQuestion}
+                onChange={(e) => setSecurityQuestion(e.target.value)}
+                required
+                className="w-full bg-zinc-50 dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                placeholder="e.g., What was your first pet's name?"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="securityAnswer"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1"
+              >
+                Security Answer
+              </label>
+              <input
+                id="securityAnswer"
+                name="securityAnswer"
+                value={securityAnswer}
+                onChange={(e) => setSecurityAnswer(e.target.value)}
+                required
+                className="w-full bg-zinc-50 dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                placeholder="Your answer"
+              />
             </div>
 
             <div>

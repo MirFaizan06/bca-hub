@@ -24,6 +24,8 @@ import AttendanceAdmin from "./pages/AttendanceAdmin";
 import AttendanceMarkPage from "./pages/AttendanceMarkPage";
 import Schedule from "./pages/Schedule";
 import Progress from "./pages/Progress";
+import Achievements from "./pages/Achievements";
+import ResetPassword from "./pages/ResetPassword";
 
 function App() {
   return (
@@ -39,12 +41,14 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/survey" element={<Survey />} />
           <Route path="/attendance/mark" element={<AttendanceMarkPage />} />
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/schedule" element={<Schedule />} />
           <Route path="/progress" element={<Progress />} />
+          <Route path="/achievements" element={<Achievements />} />
 
 
           {/* Protected Routes (any approved user) */}
