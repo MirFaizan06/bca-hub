@@ -20,6 +20,10 @@ import Register from "./pages/Register";
 import Community from "./pages/Community";
 import Announcements from "./pages/Announcements";
 import Attendance from "./pages/Attendance";
+import AttendanceAdmin from "./pages/AttendanceAdmin";
+import AttendanceMarkPage from "./pages/AttendanceMarkPage";
+import Schedule from "./pages/Schedule";
+import Progress from "./pages/Progress";
 
 function App() {
   return (
@@ -37,6 +41,11 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/survey" element={<Survey />} />
+          <Route path="/attendance/mark" element={<AttendanceMarkPage />} />
+          <Route path="/attendance" element={<Attendance />} />
+          <Route path="/schedule" element={<Schedule />} />
+          <Route path="/progress" element={<Progress />} />
+
 
           {/* Protected Routes (any approved user) */}
           <Route
@@ -91,10 +100,10 @@ function App() {
           />
 
           <Route
-            path="/attendance"
+            path="/attendance-admin"
             element={
               <ProtectedRoute requireAdmin={true}>
-                <Attendance />
+                <AttendanceAdmin />
               </ProtectedRoute>
             }
           />

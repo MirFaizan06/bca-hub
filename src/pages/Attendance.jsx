@@ -1,243 +1,172 @@
 // src/pages/Attendance.jsx
-
-import { useState, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
-import { Html5Qrcode } from "html5-qrcode";
-import QRCode from "react-qr-code";
-import { toast } from "sonner";
-import { useNavigate, useLocation } from "react-router-dom";
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
-import {
-  getFirestore,
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  setDoc,
-  serverTimestamp,
-} from "firebase/firestore";
+import { useState, useEffect, useCallback } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../utils/firebase';
+import { toast } from 'sonner';
+import { motion } from 'framer-motion';
+import { Loader2, Calendar, Check, X, BarChart2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export default function Attendance() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const auth = getAuth();
-  const db = getFirestore();
+  const [attendance, setAttendance] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ total: 0, present: 0, percentage: 0 });
 
-  // Build today's date and base token
-  const today = new Date().toISOString().slice(0, 10);
-  const rawToken = btoa(`ATTEND:${today}:bca-hub`);
-
-  // Attendance URL: clicking it will hit this same page with ?token=...
-  const attendanceUrl = `${window.location.origin}/attendance?token=${rawToken}`;
-
-  // State
-  const [scanned, setScanned] = useState(false);
-  const [scanError, setScanError] = useState("");
-  const [roll, setRoll] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [scannerActive, setScannerActive] = useState(false);
-
-  const html5QrCodeRef = useRef(null);
-
-  // If user arrived via generic scanner link, check token param
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const tokenParam = params.get("token");
-    if (tokenParam === rawToken) {
-      setScanned(true);
-    }
-  }, [location.search, rawToken]);
-
-  // Start in-site camera scanner if still not scanned
-  useEffect(() => {
-    if (scanned) return;
-
-    const onScanSuccess = (decoded) => {
-      let token = decoded;
-      try {
-        // If scanner reads a URL, extract token param
-        const url = new URL(decoded);
-        token = url.searchParams.get("token");
-      } catch {
-        // Not a URL, leave token as-is
-      }
-
-      if (token === rawToken) {
-        html5QrCodeRef.current
-          .stop()
-          .catch(() => {})
-          .finally(() => setScannerActive(false));
-        setScanned(true);
-      } else {
-        setScanError("Scanned QR is invalid for today.");
-      }
-    };
-
-    const qrRegionId = "qr-reader";
-    html5QrCodeRef.current = new Html5Qrcode(qrRegionId);
-    html5QrCodeRef.current
-      .start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: 250 },
-        onScanSuccess,
-        (_err) => {}
-      )
-      .then(() => setScannerActive(true))
-      .catch((err) => {
-        console.error("Unable to start scanner:", err);
-        setScanError("Cannot access camera. Please use the link above.");
-      });
-
-    return () => {
-      if (scannerActive && html5QrCodeRef.current) {
-        html5QrCodeRef.current.stop().catch(() => {});
-      }
-    };
-  }, [scanned, rawToken, scannerActive]);
-
-  // Handle form-based check-in
-  const handleCheckIn = async (e) => {
-    e.preventDefault();
+  const fetchAttendance = useCallback(async () => {
     setLoading(true);
-
-    const trimmedRoll = roll.trim().replace(/[^a-zA-Z0-9]/g, "");
-    const trimmedPwd = password.trim();
-    if (!trimmedRoll || !trimmedPwd) {
-      toast.error("Roll number and password are required.");
-      setLoading(false);
+    
+    // Get user from localStorage
+    const storedUser = JSON.parse(localStorage.getItem('user'));
+    if (!storedUser) {
+      navigate('/login');
       return;
     }
-
-    const email = `${trimmedRoll}@bca-hub.com`;
-
+    
     try {
-      const { user } = await signInWithEmailAndPassword(auth, email, trimmedPwd);
-      const uid = user.uid;
-
-      // Prevent multiple check-ins per day
-      const attendanceRef = collection(db, "attendance");
-      const q = query(
-        attendanceRef,
-        where("uid", "==", uid),
-        where("date", "==", today)
-      );
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        toast.error("You have already checked in today.");
-        setLoading(false);
-        return;
-      }
-
-      // Record attendance
-      await setDoc(doc(db, "attendance", `${today}_${uid}`), {
-        uid,
-        roll: trimmedRoll,
-        date: today,
-        timestamp: serverTimestamp(),
+      const recordsRef = collection(db, 'attendanceRecords');
+      const recordsSnapshot = await getDocs(recordsRef);
+      
+      // Filter client-side
+      const records = [];
+      recordsSnapshot.forEach(doc => {
+        const data = doc.data();
+        if (data.userId === storedUser.roll) {
+          records.push({ id: doc.id, ...data });
+        }
       });
 
-      toast.success("Attendance recorded successfully!");
-      navigate("/dashboard");
+      // Sort by date (newest first)
+      records.sort((a, b) => {
+        const dateA = new Date(a.date);
+        const dateB = new Date(b.date);
+        return dateB - dateA;
+      });
+
+      setAttendance(records);
+      
+      // Calculate stats
+      const presentDays = records.length;
+      const totalPossible = 30; // Adjust based on your needs
+      const percentage = Math.round((presentDays / totalPossible) * 100);
+      
+      setStats({
+        total: totalPossible,
+        present: presentDays,
+        percentage: percentage
+      });
     } catch (err) {
-      console.error(err);
-      toast.error("Authentication failed or attendance error.");
+      console.error('Error fetching attendance:', err);
+      toast.error('Failed to load attendance records');
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    fetchAttendance();
+  }, [fetchAttendance]);
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-start bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 p-4 space-y-8">
-      {/* Always show the QR code link */}
-      <div className="text-center">
-        <h1 className="text-2xl font-bold mb-2">Today's Attendance</h1>
-        <p className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Scan this QR or&nbsp;
-          <a
-            href={attendanceUrl}
-            className="text-blue-600 hover:underline"
-          >
-            click here
-          </a>
-          &nbsp;to open on your device.
-        </p>
-        <QRCode
-          value={attendanceUrl}
-          size={180}
-          bgColor="transparent"
-          fgColor="#2563eb"
-          className="mx-auto"
-        />
-      </div>
-
-      {!scanned ? (
+    <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-zinc-100 dark:from-zinc-900 dark:to-zinc-950 text-zinc-900 dark:text-zinc-100 py-8 px-4">
+      <div className="max-w-4xl mx-auto">
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="space-y-4 text-center"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-6 space-y-8"
         >
-          <div
-            id="qr-reader"
-            className="w-64 h-64 mx-auto border rounded-lg overflow-hidden"
-          />
-          {scanError && <p className="text-red-600">{scanError}</p>}
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Align your camera with the QR code.
-          </p>
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold">My Attendance</h1>
+            <div className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full">
+              <BarChart2 size={18} />
+              <span>{stats.percentage}% ({stats.present}/{stats.total})</span>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+            </div>
+          ) : attendance.length === 0 ? (
+            <div className="text-center py-12">
+              <Calendar className="h-12 w-12 text-zinc-400 mx-auto mb-4" />
+              <p className="text-lg">No attendance records found.</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+                  <p className="text-sm text-green-800 dark:text-green-300">Present</p>
+                  <p className="text-2xl font-bold">{stats.present} days</p>
+                </div>
+                <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg">
+                  <p className="text-sm text-red-800 dark:text-red-300">Absent</p>
+                  <p className="text-2xl font-bold">{stats.total - stats.present} days</p>
+                </div>
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                  <p className="text-sm text-blue-800 dark:text-blue-300">Percentage</p>
+                  <p className="text-2xl font-bold">{stats.percentage}%</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700">
+                  <thead className="bg-zinc-50 dark:bg-zinc-700/30">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
+                        Time
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-zinc-800 divide-y divide-zinc-200 dark:divide-zinc-700">
+                    {attendance.map((record) => {
+                      // Handle both Firestore Timestamp and JS Date formats
+                      let dateObj;
+                      if (record.timestamp?.seconds) {
+                        dateObj = new Date(record.timestamp.seconds * 1000);
+                      } else if (record.timestamp instanceof Date) {
+                        dateObj = record.timestamp;
+                      } else {
+                        dateObj = new Date(record.timestamp);
+                      }
+                      
+                      const dateString = dateObj.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      });
+                      const timeString = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      
+                      return (
+                        <tr key={record.id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            {dateString}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200">
+                              <Check className="h-3.5 w-3.5 mr-1" />
+                              Present
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-600 dark:text-zinc-300">
+                            {timeString}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </motion.div>
-      ) : (
-        <motion.form
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          onSubmit={handleCheckIn}
-          className="w-full max-w-sm bg-zinc-50 dark:bg-zinc-800 p-6 rounded-xl shadow-lg space-y-4"
-        >
-          <h2 className="text-xl font-semibold text-center">
-            Confirm Your Identity
-          </h2>
-
-          <div className="flex flex-col">
-            <label htmlFor="roll" className="text-sm font-medium mb-1">
-              Roll Number
-            </label>
-            <input
-              id="roll"
-              value={roll}
-              onChange={(e) =>
-                setRoll(e.target.value.replace(/[^a-zA-Z0-9]/g, ""))
-              }
-              required
-              className="border px-3 py-2 rounded-md focus:ring-2 focus:ring-blue-400"
-              placeholder="2401306"
-            />
-          </div>
-
-          <div className="flex flex-col">
-            <label htmlFor="pwd" className="text-sm font-medium mb-1">
-              Password
-            </label>
-            <input
-              id="pwd"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="border px-3 py-2 rounded-md focus:ring-2 focus:ring-blue-400"
-              placeholder="••••••••"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md disabled:opacity-50 transition"
-          >
-            {loading ? "Checking In…" : "Check In"}
-          </button>
-        </motion.form>
-      )}
-    </main>
-);
+      </div>
+    </div>
+  );
 }

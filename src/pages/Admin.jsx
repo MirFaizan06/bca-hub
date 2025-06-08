@@ -32,9 +32,12 @@ import {
   Bell,
   ChevronDown,
   Clipboard,
+  Calendar,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import dayjs from "dayjs";
+import * as XLSX from "xlsx";
 
 // Animation variants
 const fadeIn = {
@@ -63,6 +66,7 @@ const TABS = [
   { key: "cms", label: "CMS", icon: <FileText size={18} /> },
   { key: "announcements", label: "Announcements", icon: <Bell size={18} /> },
   { key: "mockTests", label: "Mock Tests", icon: <Clipboard size={18} /> },
+  { key: "attendance", label: "Attendance", icon: <Calendar size={18} /> },
 ];
 
 export default function Admin() {
@@ -96,8 +100,14 @@ export default function Admin() {
     options: ["", "", "", ""],
     correctIndex: 0,
   });
+  
+  // Attendance states
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [startDate, setStartDate] = useState(dayjs().startOf('month').format('YYYY-MM-DD'));
+  const [endDate, setEndDate] = useState(dayjs().endOf('month').format('YYYY-MM-DD'));
+  const [exportLoading, setExportLoading] = useState(false);
 
-  // Redirect non-admin users
+    // Redirect non-admin users
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (!stored) {
@@ -148,7 +158,6 @@ export default function Admin() {
       toast.error("Failed to reject user");
     }
   };
-  // ─────────────────────────────────────────────────────────────────
 
   // ───────────────────────── SHOW USERS TAB ────────────────────────
   useEffect(() => {
@@ -209,7 +218,6 @@ export default function Admin() {
       toast.error("Failed to update user role");
     }
   };
-  // ─────────────────────────────────────────────────────────────────
 
   // ───────────────────────── RESPONSES TAB ─────────────────────────
   useEffect(() => {
@@ -299,7 +307,6 @@ export default function Admin() {
       toast.error("Failed to delete survey response");
     }
   };
-  // ─────────────────────────────────────────────────────────────────
 
   // ───────────────────────── LOGS TAB ─────────────────────────────
   useEffect(() => {
@@ -334,7 +341,6 @@ export default function Admin() {
       fetchLogs();
     }
   }, [activeTab]);
-  // ─────────────────────────────────────────────────────────────────
 
   // ───────────────────────── ANNOUNCEMENTS TAB ────────────────────
   useEffect(() => {
@@ -361,7 +367,6 @@ export default function Admin() {
     });
     return () => unsubscribe();
   }, []);
-  // ─────────────────────────────────────────────────────────────────
 
   // ───────────────────────── LOGGING ACTIONS ──────────────────────
   const logAction = async (message) => {
@@ -375,7 +380,6 @@ export default function Admin() {
       console.error("Failed to log action:", err);
     }
   };
-  // ─────────────────────────────────────────────────────────────────
 
   // ───────────────────────── CMS TAB ──────────────────────────────
   useEffect(() => {
@@ -577,7 +581,6 @@ export default function Admin() {
   };
 
   // -------------- MOCK TESTS ----------------------------
-
   useEffect(() => {
     if (activeTab === "mockTests") {
       const fetchTopics = async () => {
@@ -636,6 +639,40 @@ export default function Admin() {
     }
   };
 
+  const deleteMockTestTopic = async (topicId) => {
+    if (!window.confirm("Are you sure you want to delete this topic and all its questions?")) {
+      return;
+    }
+    
+    try {
+      // Delete all questions first
+      const questionsCol = collection(db, `mockTestTopics/${topicId}/questions`);
+      const questionsSnapshot = await getDocs(questionsCol);
+      
+      const deletePromises = questionsSnapshot.docs.map(doc => 
+        deleteDoc(doc.ref)
+      );
+      
+      await Promise.all(deletePromises);
+      
+      // Delete the topic
+      await deleteDoc(doc(db, "mockTestTopics", topicId));
+      
+      // Update state
+      setMockTestTopics(prev => prev.filter(t => t.id !== topicId));
+      
+      if (selectedMockTestTopic === topicId) {
+        setSelectedMockTestTopic(null);
+        setMockQuestions([]);
+      }
+      
+      toast.success("Topic and all questions deleted successfully");
+    } catch (err) {
+      console.error("Error deleting topic:", err);
+      toast.error("Failed to delete topic");
+    }
+  };
+
   const addMockTestQuestion = async () => {
     if (
       !newQuestion.text.trim() ||
@@ -691,9 +728,77 @@ export default function Admin() {
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────
+  // ========= ATTENDANCE TAB =========
+  useEffect(() => {
+    if (activeTab === "attendance") {
+      const fetchAttendance = async () => {
+        try {
+          const q = query(
+            collection(db, "attendanceRecords"),
+            where("date", ">=", startDate),
+            where("date", "<=", endDate)
+          );
+          
+          const querySnapshot = await getDocs(q);
+          const records = [];
+          
+          querySnapshot.forEach(doc => {
+            const data = doc.data();
+            records.push({
+              id: doc.id,
+              userId: data.userId,
+              name: data.name,
+              date: data.date,
+              timestamp: data.timestamp?.toDate() || new Date(),
+              deviceId: data.deviceId
+            });
+          });
+          
+          setAttendanceRecords(records);
+        } catch (err) {
+          console.error("Error fetching attendance:", err);
+          toast.error("Failed to load attendance records");
+        }
+      };
+      
+      fetchAttendance();
+    }
+  }, [activeTab, startDate, endDate]);
 
-  return (
+  const exportToExcel = () => {
+    setExportLoading(true);
+    
+    try {
+      // Format data for Excel
+      const formattedData = attendanceRecords.map(record => ({
+        "Roll Number": record.userId,
+        "Name": record.name,
+        "Date": record.date,
+        "Time": dayjs(record.timestamp).format('hh:mm A'),
+        "Device ID": record.deviceId
+      }));
+      
+      // Create worksheet and workbook
+      const ws = XLSX.utils.json_to_sheet(formattedData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+      
+      // Generate file name with month
+      const monthName = dayjs(startDate).format('MMMM');
+      const fileName = `bca-major-attendance-${monthName}.xlsx`;
+      
+      // Export file
+      XLSX.writeFile(wb, fileName);
+      toast.success("Attendance exported successfully");
+    } catch (err) {
+      console.error("Export failed:", err);
+      toast.error("Failed to export attendance");
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+    return (
     <main className="min-h-screen bg-gradient-to-b from-zinc-50 to-zinc-100 dark:from-zinc-900 dark:to-zinc-950 text-zinc-800 dark:text-zinc-100 py-12 px-4">
       <div className="max-w-7xl mx-auto space-y-8">
         <motion.div
@@ -1672,7 +1777,7 @@ export default function Admin() {
               </motion.div>
             )}
 
-            {/* {MOCK TESTS TAB} */}
+            {/* ========= MOCK TESTS TAB ========= */}
             {activeTab === "mockTests" && (
               <motion.div
                 key="mockTestsTab"
@@ -1691,7 +1796,9 @@ export default function Admin() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Topic Management */}
                   <div className="bg-zinc-50 dark:bg-zinc-900/30 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700">
-                    <h3 className="text-lg font-bold mb-4">Topics</h3>
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-bold">Topics</h3>
+                    </div>
 
                     {/* Add Topic Form */}
                     <div className="flex gap-2 mb-4">
@@ -1715,21 +1822,31 @@ export default function Admin() {
                       {mockTestTopics.map((topic) => (
                         <div
                           key={topic.id}
-                          className={`p-3 rounded-lg cursor-pointer transition ${
+                          className={`flex justify-between items-center p-3 rounded-lg transition ${
                             selectedMockTestTopic === topic.id
                               ? "bg-gradient-to-r from-blue-600 to-indigo-700 text-white"
                               : "bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700"
                           }`}
-                          onClick={() => setSelectedMockTestTopic(topic.id)}
                         >
-                          <div className="font-medium">{topic.name}</div>
-                          <div className="text-sm opacity-80">
-                            {topic.createdAt
-                              ? dayjs(topic.createdAt.toDate()).format(
-                                  "DD MMM YYYY"
-                                )
-                              : "Unknown date"}
+                          <div 
+                            className="flex-1 cursor-pointer"
+                            onClick={() => setSelectedMockTestTopic(topic.id)}
+                          >
+                            <div className="font-medium">{topic.name}</div>
+                            <div className="text-sm opacity-80">
+                              {topic.createdAt
+                                ? dayjs(topic.createdAt.toDate()).format(
+                                    "DD MMM YYYY"
+                                  )
+                                : "Unknown date"}
+                            </div>
                           </div>
+                          <button
+                            onClick={() => deleteMockTestTopic(topic.id)}
+                            className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 ml-2"
+                          >
+                            <Trash2 size={18} />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -1873,6 +1990,122 @@ export default function Admin() {
                     )}
                   </div>
                 </div>
+              </motion.div>
+            )}
+
+            {/* ========= ATTENDANCE TAB ========= */}
+            {activeTab === "attendance" && (
+              <motion.div
+                key="attendanceTab"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4 }}
+                className="space-y-6"
+              >
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-0.5 bg-blue-600 dark:bg-blue-500"></div>
+                  <h2 className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                    Attendance Records
+                  </h2>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Start Date</label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-1">End Date</label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={exportToExcel}
+                  disabled={exportLoading || attendanceRecords.length === 0}
+                  className="bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 text-white font-medium py-2 px-6 rounded-lg shadow-md hover:shadow-lg transition-all flex items-center mb-6 disabled:opacity-70"
+                >
+                  {exportLoading ? (
+                    <>
+                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                      Exporting...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-5 w-5 mr-2" />
+                      Export to Excel
+                    </>
+                  )}
+                </button>
+
+                {attendanceRecords.length === 0 ? (
+                  <div className="text-center py-8 bg-zinc-50 dark:bg-zinc-900/30 rounded-xl">
+                    <div className="bg-blue-100 dark:bg-blue-900/20 p-4 rounded-full inline-block mb-4">
+                      <Calendar
+                        className="text-blue-600 dark:text-blue-400"
+                        size={32}
+                      />
+                    </div>
+                    <p className="text-zinc-600 dark:text-zinc-300">
+                      No attendance records found for selected date range
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse">
+                      <thead>
+                        <tr className="bg-zinc-100 dark:bg-zinc-700/50">
+                          <th className="py-3 px-4 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300 rounded-l-xl">
+                            Date
+                          </th>
+                          <th className="py-3 px-4 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                            Roll Number
+                          </th>
+                          <th className="py-3 px-4 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                            Name
+                          </th>
+                          <th className="py-3 px-4 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                            Time
+                          </th>
+                          <th className="py-3 px-4 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300 rounded-r-xl">
+                            Device ID
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {attendanceRecords.map((record) => (
+                          <tr
+                            key={record.id}
+                            className="border-b border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700/10"
+                          >
+                            <td className="py-3 px-4">{record.date}</td>
+                            <td className="py-3 px-4">{record.userId}</td>
+                            <td className="py-3 px-4 font-medium">
+                              {record.name}
+                            </td>
+                            <td className="py-3 px-4">
+                              {dayjs(record.timestamp).format('hh:mm A')}
+                            </td>
+                            <td className="py-3 px-4 text-sm font-mono">
+                              {record.deviceId.substring(0, 8)}...
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </motion.div>
             )}
           </div>

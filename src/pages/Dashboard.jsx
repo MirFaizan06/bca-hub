@@ -13,10 +13,26 @@ import {
   getDocs,
   query,
   where,
+  orderBy,
 } from "firebase/firestore";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
-import { ArrowUpCircle, HelpCircle, X, ChevronRight, ChevronLeft } from "lucide-react";
+import {
+  ArrowUpCircle,
+  HelpCircle,
+  X,
+  ChevronRight,
+  ChevronLeft,
+  User,
+  BarChart,
+  Calendar,
+  BookOpen,
+  Upload,
+  Sparkles,
+  Award,
+  Clock,
+  TrendingUp
+} from "lucide-react";
 import { db, storage } from "../utils/firebase";
 import { useNavigate } from "react-router-dom";
 import { Line } from "react-chartjs-2";
@@ -29,7 +45,7 @@ import {
   Title,
   Tooltip,
   Legend,
-} from 'chart.js';
+} from "chart.js";
 
 // Register ChartJS components
 ChartJS.register(
@@ -50,7 +66,7 @@ export default function Dashboard() {
 
   // Check if tutorial was shown before
   useEffect(() => {
-    const tutorialShown = localStorage.getItem('dashboardTutorialShown');
+    const tutorialShown = localStorage.getItem("dashboardTutorialShown");
     if (!tutorialShown) {
       setShowTutorial(true);
     }
@@ -58,30 +74,32 @@ export default function Dashboard() {
 
   const closeTutorial = () => {
     setShowTutorial(false);
-    localStorage.setItem('dashboardTutorialShown', 'true');
+    localStorage.setItem("dashboardTutorialShown", "true");
   };
 
   const tutorialSteps = [
     {
       title: "Welcome to Your Dashboard!",
-      content: "This is your central hub for tracking progress and managing your profile.",
-      selector: null
+      content:
+        "This is your central hub for tracking progress and managing your profile.",
+      selector: null,
     },
     {
-      title: "Profile Tab",
+      title: "Profile Management",
       content: "Update your personal information and profile picture here.",
-      selector: "#profile-tab"
+      selector: "#profile-card",
+    },
+    {
+      title: "Performance Insights",
+      content: "Track your progress with visual metrics and statistics.",
+      selector: "#performance-section",
     },
     {
       title: "Mock Test History",
-      content: "View all your past test attempts and track your progress over time.",
-      selector: "#history-tab"
+      content:
+        "Review all your past test attempts and analyze your performance.",
+      selector: "#history-section",
     },
-    {
-      title: "Progress Graph",
-      content: "Visual representation of your test scores to help identify trends.",
-      selector: "#progress-graph"
-    }
   ];
 
   // ======== User Info State ========
@@ -93,13 +111,21 @@ export default function Dashboard() {
   });
 
   // ======== Quote of the Day ========
-  const [quote, setQuote] = useState({ content: "", author: "" });
+  const [quote, setQuote] = useState({ 
+    content: "Education is the passport to the future, for tomorrow belongs to those who prepare for it today.", 
+    author: "Malcolm X" 
+  });
 
   // ======== Mock History State ========
   const [history, setHistory] = useState([]);
 
-  // ======== Tabs ========
-  const [activeTab, setActiveTab] = useState("profile");
+  // ======== Performance Stats ========
+  const [performanceStats, setPerformanceStats] = useState({
+    avgScore: 0,
+    bestScore: 0,
+    testsTaken: 0,
+    improvement: 0
+  });
 
   // ======== Profile Edit Fields ========
   const [editData, setEditData] = useState({
@@ -155,23 +181,20 @@ export default function Dashboard() {
   // ======== Fetch Quote of the Day ========
   useEffect(() => {
     const fetchQuote = async () => {
-      const todayKey = `quote_${new Date().toISOString().slice(0, 10)}`;
-      const storedQuote = localStorage.getItem(todayKey);
-      if (storedQuote) {
-        setQuote(JSON.parse(storedQuote));
-      } else {
-        try {
-          const res = await fetch("https://api.quotable.io/random");
-          const data = await res.json();
-          const q = { content: data.content, author: data.author };
-          setQuote(q);
-          localStorage.setItem(todayKey, JSON.stringify(q));
-        } catch {
-          setQuote({
-            content: "Stay positive, work hard, make it happen.",
-            author: "Unknown",
-          });
-        }
+      try {
+        // Using a reliable quotes API with fallback
+        const res = await fetch("https://api.quotable.io/random");
+        const data = await res.json();
+        setQuote({ content: data.content, author: data.author });
+      } catch {
+        // Fallback quotes if API fails
+        const fallbackQuotes = [
+          { content: "The future belongs to those who believe in the beauty of their dreams.", author: "Eleanor Roosevelt" },
+          { content: "Success is not final, failure is not fatal: It is the courage to continue that counts.", author: "Winston Churchill" },
+          { content: "Education is the most powerful weapon which you can use to change the world.", author: "Nelson Mandela" }
+        ];
+        const randomQuote = fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)];
+        setQuote(randomQuote);
       }
     };
     fetchQuote();
@@ -187,13 +210,11 @@ export default function Dashboard() {
     setUserInfo((prev) => ({
       ...prev,
       name: editData.name,
-      batch: editData.batch,
     }));
     toast.success("Profile updated!");
     try {
       await updateDoc(doc(db, "users", userInfo.roll), {
         name: editData.name,
-        batch: editData.batch,
         pfpUrl: userInfo.pfpUrl,
       });
     } catch (err) {
@@ -206,6 +227,17 @@ export default function Dashboard() {
     const file = e.target.files?.[0];
     if (!file) {
       toast.error("No file selected.");
+      return;
+    }
+
+    // Validate file type and size
+    if (!file.type.match("image.*")) {
+      toast.error("Please select an image file.");
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("File size too large (max 2MB)");
       return;
     }
 
@@ -225,10 +257,12 @@ export default function Dashboard() {
       toast.success("Profile picture updated!");
     } catch (err) {
       console.error("Upload PFP error:", err);
-      toast.error("Failed to upload image.");
+      toast.error("Failed to upload image. Please try again.");
     } finally {
       setUploading(false);
-      fileInputRef.current.value = ""; // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""; // Reset file input
+      }
     }
   };
 
@@ -249,7 +283,8 @@ export default function Dashboard() {
       try {
         const historyQuery = query(
           collection(db, "mocktests"),
-          where("uid", "==", userInfo.roll)
+          where("uid", "==", userInfo.roll),
+          orderBy("createdAt", "desc")
         );
         const querySnapshot = await getDocs(historyQuery);
         const historyData = querySnapshot.docs.map((doc) => ({
@@ -257,6 +292,28 @@ export default function Dashboard() {
           ...doc.data(),
         }));
         setHistory(historyData);
+        
+        // Calculate performance stats
+        if (historyData.length > 0) {
+          const scores = historyData.map(item => item.score);
+          const bestScore = Math.max(...scores);
+          const avgScore = (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
+          
+          // Calculate improvement (last 3 tests vs first 3 tests)
+          let improvement = 0;
+          if (historyData.length >= 6) {
+            const firstThreeAvg = (historyData.slice(-3).reduce((sum, test) => sum + test.score, 0) / 3);
+            const lastThreeAvg = (historyData.slice(0, 3).reduce((sum, test) => sum + test.score, 0) / 3);
+            improvement = ((lastThreeAvg - firstThreeAvg) / firstThreeAvg * 100).toFixed(1);
+          }
+          
+          setPerformanceStats({
+            avgScore,
+            bestScore,
+            testsTaken: scores.length,
+            improvement
+          });
+        }
       } catch (error) {
         console.error("Error fetching mock test history:", error);
       }
@@ -269,428 +326,550 @@ export default function Dashboard() {
 
   // Prepare data for the progress chart
   const chartData = {
-    labels: history.map((item) => 
-      item.createdAt?.toDate().toLocaleDateString() || 'Test'
-    ),
+    labels: history.map(
+      (item) => item.createdAt?.toDate().toLocaleDateString("en-GB", { day: 'numeric', month: 'short' }) || "Test"
+    ).reverse(),
     datasets: [
       {
-        label: 'Test Scores',
-        data: history.map((item) => item.score),
-        borderColor: 'rgba(59, 130, 246, 0.8)',
-        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+        label: "Test Scores",
+        data: history.map((item) => item.score).reverse(),
+        borderColor: "rgba(99, 102, 241, 0.9)",
+        backgroundColor: "rgba(99, 102, 241, 0.2)",
         tension: 0.4,
-        fill: true
-      }
-    ]
+        fill: true,
+        pointBackgroundColor: "rgba(99, 102, 241, 1)",
+        pointBorderColor: "#fff",
+        pointHoverRadius: 6
+      },
+    ],
   };
 
   const chartOptions = {
     responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'top',
+        display: false
       },
       tooltip: {
+        backgroundColor: "rgba(30, 30, 40, 0.9)",
+        titleFont: {
+          size: 14
+        },
+        bodyFont: {
+          size: 13
+        },
+        padding: 12,
         callbacks: {
-          label: function(context) {
+          label: function (context) {
             return `Score: ${context.raw}/40`;
           }
         }
-      }
+      },
     },
     scales: {
       y: {
         beginAtZero: true,
         max: 40,
+        grid: {
+          color: "rgba(200, 200, 220, 0.2)"
+        },
         ticks: {
-          stepSize: 5
+          stepSize: 5,
+          color: "rgba(100, 100, 120, 0.8)"
+        }
+      },
+      x: {
+        grid: {
+          display: false
+        },
+        ticks: {
+          color: "rgba(100, 100, 120, 0.8)"
         }
       }
-    }
+    },
+  };
+
+  // Get performance rating
+  const getPerformanceRating = (score) => {
+    const percentage = (score / 40) * 100;
+    if (percentage >= 85) return "Exceptional";
+    if (percentage >= 70) return "Excellent";
+    if (percentage >= 55) return "Good";
+    if (percentage >= 40) return "Average";
+    return "Needs Improvement";
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-zinc-50 to-zinc-100 dark:from-zinc-900 dark:to-zinc-950 text-zinc-900 dark:text-zinc-100 py-8 px-4">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header with tutorial button */}
-        <div className="flex justify-between items-center">
-          <div className="text-center space-y-2">
-            <motion.h1 
-              className="text-4xl font-extrabold bg-gradient-to-r from-blue-600 to-indigo-700 bg-clip-text text-transparent"
-              initial={{ opacity: 0, y: -20 }}
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 dark:from-gray-900 dark:to-gray-950 text-gray-900 dark:text-gray-100">
+      {/* Header */}
+      <header className="bg-gradient-to-r from-indigo-600 to-purple-700 text-white py-6 px-4 shadow-lg">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold">Learning Dashboard</h1>
+            <p className="text-indigo-200">Welcome back, {userInfo.name || "Student"}!</p>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => navigate("/attendance")}
+              className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm px-4 py-2 rounded-lg transition-all"
+            >
+              <Calendar size={18} />
+              View Attendance
+            </button>
+            
+            <button
+              onClick={() => setShowTutorial(true)}
+              className="p-2 rounded-full hover:bg-white/20 transition-colors"
+              aria-label="Show tutorial"
+            >
+              <HelpCircle size={24} />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="py-8 px-4">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Quote Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
+              className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-2xl p-6 shadow-xl"
             >
-              Hello, {userInfo.name || "Student"}.
-            </motion.h1>
-            <motion.p 
-              className="text-lg text-zinc-600 dark:text-zinc-400"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3, duration: 0.5 }}
-            >
-              Welcome to your learning dashboard
-            </motion.p>
-          </div>
-          <button 
-            onClick={() => setShowTutorial(true)}
-            className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-            aria-label="Show tutorial"
-          >
-            <HelpCircle className="text-blue-600 dark:text-blue-400" size={24} />
-          </button>
-        </div>
+              <Sparkles className="mb-3 text-yellow-300" size={28} />
+              <p className="text-xl italic font-light mb-4">"{quote.content}"</p>
+              <p className="text-right font-medium text-indigo-100">— {quote.author}</p>
+            </motion.div>
 
-        {/* Quote Card */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6 }}
-          className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 max-w-3xl mx-auto"
-        >
-          <p className="italic text-lg text-center">"{quote.content}"</p>
-          <p className="mt-2 text-right font-medium text-blue-600 dark:text-blue-400">
-            — {quote.author}
-          </p>
-        </motion.div>
-
-        {/* Tabs */}
-        <div className="flex justify-center gap-6 border-b border-zinc-200 dark:border-zinc-700 pb-2">
-          <button
-            id="profile-tab"
-            onClick={() => setActiveTab("profile")}
-            className={`py-2 px-4 font-medium transition flex items-center gap-1 ${
-              activeTab === "profile"
-                ? "border-b-2 border-blue-600 text-blue-600 dark:text-blue-400"
-                : "text-zinc-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400"
-            }`}
-          >
-            <span>Profile</span>
-          </button>
-          <button
-            id="history-tab"
-            onClick={() => setActiveTab("history")}
-            className={`py-2 px-4 font-medium transition flex items-center gap-1 ${
-              activeTab === "history"
-                ? "border-b-2 border-blue-600 text-blue-600 dark:text-blue-400"
-                : "text-zinc-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400"
-            }`}
-          >
-            <span>Mock Test History</span>
-          </button>
-        </div>
-
-        {/* Tab Content */}
-        <div className="relative">
-          {/* Tutorial Overlay */}
-          <AnimatePresence>
-            {showTutorial && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
-              >
-                <motion.div
-                  ref={tutorialRef}
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.9, opacity: 0 }}
-                  transition={{ type: 'spring', damping: 25 }}
-                  className="bg-white dark:bg-zinc-800 rounded-xl shadow-xl p-6 max-w-md w-full relative"
-                >
-                  <button
-                    onClick={closeTutorial}
-                    className="absolute top-4 right-4 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                  >
-                    <X size={20} />
-                  </button>
-                  
-                  <div className="text-center mb-6">
-                    <h3 className="text-xl font-bold mb-2">
-                      {tutorialSteps[currentTutorialStep].title}
-                    </h3>
-                    <p className="text-zinc-600 dark:text-zinc-400">
-                      {tutorialSteps[currentTutorialStep].content}
-                    </p>
-                  </div>
-                  
-                  <div className="flex justify-between mt-6">
-                    <button
-                      onClick={() => setCurrentTutorialStep(prev => Math.max(0, prev - 1))}
-                      disabled={currentTutorialStep === 0}
-                      className="flex items-center gap-1 px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft size={18} />
-                      Previous
-                    </button>
-                    
-                    <div className="flex gap-1">
-                      {tutorialSteps.map((_, index) => (
-                        <button
-                          key={index}
-                          onClick={() => setCurrentTutorialStep(index)}
-                          className={`w-2 h-2 rounded-full ${currentTutorialStep === index ? 'bg-blue-600' : 'bg-zinc-300 dark:bg-zinc-600'}`}
-                          aria-label={`Go to step ${index + 1}`}
-                        />
-                      ))}
-                    </div>
-                    
-                    {currentTutorialStep < tutorialSteps.length - 1 ? (
-                      <button
-                        onClick={() => setCurrentTutorialStep(prev => prev + 1)}
-                        className="flex items-center gap-1 px-4 py-2 rounded-lg bg-blue-600 text-white"
-                      >
-                        Next
-                        <ChevronRight size={18} />
-                      </button>
-                    ) : (
-                      <button
-                        onClick={closeTutorial}
-                        className="px-4 py-2 rounded-lg bg-blue-600 text-white"
-                      >
-                        Got it!
-                      </button>
-                    )}
-                  </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* ===== PROFILE TAB ===== */}
-          {activeTab === "profile" && (
+            {/* Performance Section */}
             <motion.div
-              key="profileTab"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.4 }}
-              className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-6 space-y-8"
+              id="performance-section"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6"
             >
-              <h2 className="text-2xl font-semibold">My Profile</h2>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <TrendingUp className="text-indigo-600" size={24} />
+                  Performance Overview
+                </h2>
+                <button 
+                  onClick={() => navigate("/mock-tests")}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg flex items-center gap-2"
+                >
+                  <BookOpen size={18} />
+                  Take Test
+                </button>
+              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {/* Profile Picture Section */}
-                <div className="space-y-6">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="relative w-32 h-32">
-                      <img
-                        src={userInfo.pfpUrl}
-                        alt="Profile"
-                        onError={(e) => {
-                          e.target.onerror = null;
-                          e.target.src = "/avatar-placeholder.png";
-                        }}
-                        className="w-32 h-32 rounded-full object-cover border-4 border-blue-200 dark:border-blue-800/50 shadow-md"
-                      />
-                      <button
-                        className="absolute bottom-0 right-0 bg-white dark:bg-zinc-700 rounded-full p-2 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors shadow-md"
-                        onClick={() => fileInputRef.current.click()}
-                      >
-                        <ArrowUpCircle
-                          size={24}
-                          className="text-blue-600 dark:text-blue-400"
-                        />
-                        <input
-                          type="file"
-                          accept="image/*"
-                          ref={fileInputRef}
-                          onChange={handleFileChange}
-                          className="hidden"
-                        />
-                      </button>
+              {history.length > 0 ? (
+                <>
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl">
+                      <p className="text-sm text-indigo-700 dark:text-indigo-300">Avg. Score</p>
+                      <p className="text-2xl font-bold">{performanceStats.avgScore}/40</p>
                     </div>
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                      {uploading ? "Uploading..." : "Click to upload new photo"}
-                    </p>
+                    <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-xl">
+                      <p className="text-sm text-purple-700 dark:text-purple-300">Best Score</p>
+                      <p className="text-2xl font-bold">{performanceStats.bestScore}/40</p>
+                    </div>
+                    <div className="bg-rose-50 dark:bg-rose-900/20 p-4 rounded-xl">
+                      <p className="text-sm text-rose-700 dark:text-rose-300">Tests Taken</p>
+                      <p className="text-2xl font-bold">{performanceStats.testsTaken}</p>
+                    </div>
+                    <div className={`${
+                      performanceStats.improvement > 0 
+                        ? "bg-green-50 dark:bg-green-900/20" 
+                        : "bg-amber-50 dark:bg-amber-900/20"
+                    } p-4 rounded-xl`}>
+                      <p className="text-sm">Improvement</p>
+                      <p className="text-2xl font-bold">
+                        {performanceStats.improvement > 0 ? '+' : ''}{performanceStats.improvement}%
+                      </p>
+                    </div>
+                  </div>
 
-                    {/* DP Library */}
-                    <div className="w-full">
-                      <h3 className="text-sm font-medium mb-3 text-center">Choose from library:</h3>
-                      <div className="grid grid-cols-5 gap-2">
-                        {dpOptions.map((url, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleSelectDP(url)}
-                            className={`w-10 h-10 rounded-full overflow-hidden border-2 ${userInfo.pfpUrl === url ? 'border-blue-500' : 'border-transparent hover:border-blue-300'}`}
-                          >
-                            <img
-                              src={url}
-                              alt={`dp-${idx + 1}`}
-                              className="w-full h-full object-cover"
-                            />
-                          </button>
-                        ))}
+                  {/* Progress Chart */}
+                  <div className="h-80">
+                    <Line data={chartData} options={chartOptions} />
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="bg-gray-100 dark:bg-gray-700/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <BarChart className="text-gray-500" size={28} />
+                  </div>
+                  <h3 className="text-lg font-medium mb-2">No Test Data Yet</h3>
+                  <p className="text-gray-500 mb-6">Take your first mock test to see performance insights</p>
+                  <button 
+                    onClick={() => navigate("/mock-tests")}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-6 rounded-lg"
+                  >
+                    Start Your First Test
+                  </button>
+                </div>
+              )}
+            </motion.div>
+
+            {/* History Section */}
+            <motion.div
+              id="history-section"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6"
+            >
+              <h2 className="text-xl font-bold flex items-center gap-2 mb-6">
+                <Clock className="text-indigo-600" size={24} />
+                Recent Mock Tests
+              </h2>
+
+              {history.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="bg-gray-100 dark:bg-gray-700/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <BookOpen className="text-gray-500" size={28} />
+                  </div>
+                  <h3 className="text-lg font-medium mb-2">No Tests Taken Yet</h3>
+                  <p className="text-gray-500 mb-6">Start your learning journey with a mock test</p>
+                  <button 
+                    onClick={() => navigate("/mock-tests")}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-6 rounded-lg"
+                  >
+                    Take a Mock Test
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {history.slice(0, 5).map((test) => (
+                    <div 
+                      key={test.id} 
+                      className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-700"
+                    >
+                      <div>
+                        <p className="font-medium">
+                          {test.createdAt?.toDate().toLocaleDateString("en-US", {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short'
+                          })}
+                        </p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          {test.subject || "General Test"}
+                        </p>
+                      </div>
+                      
+                      <div className="text-right">
+                        <p className="font-bold text-lg">{test.score}/40</p>
+                        <p className={`text-sm ${
+                          getPerformanceRating(test.score) === "Exceptional" ? "text-green-600" :
+                          getPerformanceRating(test.score) === "Excellent" ? "text-blue-600" :
+                          getPerformanceRating(test.score) === "Good" ? "text-indigo-600" :
+                          getPerformanceRating(test.score) === "Average" ? "text-amber-600" : "text-rose-600"
+                        }`}>
+                          {getPerformanceRating(test.score)}
+                        </p>
                       </div>
                     </div>
+                  ))}
+                  
+                  <button 
+                    onClick={() => navigate("/mock-tests/history")}
+                    className="w-full py-3 text-center text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium rounded-lg border border-dashed border-gray-300 dark:border-gray-700 mt-4"
+                  >
+                    View All Test History
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </div>
+
+          {/* Right Column */}
+          <div className="space-y-8">
+            {/* Profile Card */}
+            <motion.div
+              id="profile-card"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.4 }}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6"
+            >
+              <h2 className="text-xl font-bold flex items-center gap-2 mb-6">
+                <User className="text-indigo-600" size={24} />
+                My Profile
+              </h2>
+
+              {/* Profile Picture */}
+              <div className="flex flex-col items-center mb-6">
+                <div className="relative mb-4">
+                  <div className="w-32 h-32 rounded-full bg-gradient-to-r from-indigo-400 to-purple-500 p-1">
+                    <img
+                      src={userInfo.pfpUrl}
+                      alt="Profile"
+                      className="w-full h-full rounded-full object-cover border-4 border-white dark:border-gray-800"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = "/avatar-placeholder.png";
+                      }}
+                    />
+                  </div>
+                  <button
+                    className="absolute bottom-2 right-2 bg-white dark:bg-gray-700 rounded-full p-2 shadow-md hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                    onClick={() => fileInputRef.current.click()}
+                  >
+                    <Upload size={18} className="text-indigo-600" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                  </button>
+                </div>
+                <p className="text-sm text-gray-500 mb-4">
+                  {uploading ? "Uploading..." : "Click camera to upload photo"}
+                </p>
+
+                {/* Avatar Library */}
+                <div className="w-full">
+                  <h3 className="text-sm font-medium mb-3 text-gray-700 dark:text-gray-300">
+                    Choose an avatar:
+                  </h3>
+                  <div className="flex justify-center gap-3 flex-wrap">
+                    {dpOptions.map((url, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleSelectDP(url)}
+                        className={`w-10 h-10 rounded-full overflow-hidden border-2 transition-all ${
+                          userInfo.pfpUrl === url
+                            ? "border-indigo-500 scale-110"
+                            : "border-transparent hover:border-indigo-300"
+                        }`}
+                      >
+                        <img
+                          src={url}
+                          alt={`dp-${idx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
+                    ))}
                   </div>
                 </div>
+              </div>
 
-                {/* Profile Form */}
-                <div className="md:col-span-2">
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      <div className="space-y-1">
-                        <label htmlFor="name" className="block text-sm font-medium">
-                          Full Name
-                        </label>
-                        <input
-                          id="name"
-                          name="name"
-                          value={editData.name}
-                          onChange={handleChange}
-                          className="w-full border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label htmlFor="batch" className="block text-sm font-medium">
-                          Batch Year
-                        </label>
-                        <input
-                          id="batch"
-                          name="batch"
-                          value={editData.batch}
-                          onChange={handleChange}
-                          className="w-full border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                        />
-                      </div>
+              {/* Profile Form */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Full Name
+                  </label>
+                  <input
+                    name="name"
+                    value={editData.name}
+                    onChange={handleChange}
+                    className="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Batch Year
+                  </label>
+                  <input
+                    name="batch"
+                    value={editData.batch}
+                    disabled
+                    className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl px-4 py-3 opacity-80 cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Roll Number
+                  </label>
+                  <input
+                    name="roll"
+                    value={editData.roll}
+                    disabled
+                    className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl px-4 py-3 opacity-80 cursor-not-allowed"
+                  />
+                </div>
+
+                <button
+                  onClick={handleSaveProfile}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-xl shadow-md hover:shadow-lg transition-all mt-4"
+                >
+                  Update Profile
+                </button>
+              </div>
+            </motion.div>
+
+            {/* Achievements Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.5 }}
+              className="bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-2xl shadow-lg p-6"
+            >
+              <div className="flex items-start gap-3">
+                <Award className="mt-1" size={24} />
+                <div>
+                  <h3 className="text-lg font-bold mb-2">Learning Achievements</h3>
+                  <p className="mb-4">Complete challenges to unlock achievements and badges</p>
+                  <div className="flex gap-3">
+                    <div className="bg-white/20 backdrop-blur-sm w-12 h-12 rounded-xl flex items-center justify-center">
+                      <span className="text-2xl">🏆</span>
                     </div>
-
-                    <div className="space-y-1">
-                      <label htmlFor="roll" className="block text-sm font-medium">
-                        Roll Number
-                      </label>
-                      <input
-                        id="roll"
-                        name="roll"
-                        value={editData.roll}
-                        disabled
-                        className="w-full border border-zinc-300 dark:border-zinc-600 bg-zinc-100 dark:bg-zinc-700 rounded-lg px-4 py-2 cursor-not-allowed opacity-80"
-                      />
+                    <div className="bg-white/20 backdrop-blur-sm w-12 h-12 rounded-xl flex items-center justify-center">
+                      <span className="text-2xl">⭐</span>
                     </div>
-
-                    <div className="pt-4">
-                      <button
-                        onClick={handleSaveProfile}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg shadow-md hover:shadow-lg transition-all"
-                      >
-                        Save Changes
-                      </button>
+                    <div className="bg-white/20 backdrop-blur-sm w-12 h-12 rounded-xl flex items-center justify-center opacity-50">
+                      <span className="text-2xl">🚀</span>
                     </div>
                   </div>
                 </div>
               </div>
             </motion.div>
-          )}
 
-          {/* ===== HISTORY TAB ===== */}
-          {activeTab === "history" && (
+            {/* Quick Actions */}
             <motion.div
-              key="historyTab"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.4 }}
-              className="space-y-8"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.6 }}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6"
             >
-              <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-semibold">Mock Test History</h2>
-                  <button
-                    onClick={() => navigate("/mock-tests")}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all"
-                  >
-                    Take New Test
-                  </button>
+              <h3 className="font-bold mb-4">Quick Actions</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={() => navigate("/study-materials")}
+                  className="bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 p-4 rounded-xl transition-colors"
+                >
+                  <div className="text-indigo-600 dark:text-indigo-400 mb-2">
+                    <BookOpen size={20} />
+                  </div>
+                  <span>Study Materials</span>
+                </button>
+                <button 
+                  onClick={() => navigate("/schedule")}
+                  className="bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/30 p-4 rounded-xl transition-colors"
+                >
+                  <div className="text-purple-600 dark:text-purple-400 mb-2">
+                    <Calendar size={20} />
+                  </div>
+                  <span>My Schedule</span>
+                </button>
+                <button 
+                  onClick={() => navigate("/progress")}
+                  className="bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/30 p-4 rounded-xl transition-colors"
+                >
+                  <div className="text-rose-600 dark:text-rose-400 mb-2">
+                    <TrendingUp size={20} />
+                  </div>
+                  <span>Progress Report</span>
+                </button>
+                <button 
+                  onClick={() => navigate("/resources")}
+                  className="bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 p-4 rounded-xl transition-colors"
+                >
+                  <div className="text-amber-600 dark:text-amber-400 mb-2">
+                    <BookOpen size={20} />
+                  </div>
+                  <span>Resources</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </main>
+
+      {/* Tutorial Overlay */}
+      <AnimatePresence>
+        {showTutorial && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              ref={tutorialRef}
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", damping: 25 }}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 max-w-md w-full relative"
+            >
+              <button
+                onClick={closeTutorial}
+                className="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="text-center mb-6">
+                <h3 className="text-xl font-bold mb-2">
+                  {tutorialSteps[currentTutorialStep].title}
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  {tutorialSteps[currentTutorialStep].content}
+                </p>
+              </div>
+
+              <div className="flex justify-between items-center mt-6">
+                <button
+                  onClick={() =>
+                    setCurrentTutorialStep((prev) => Math.max(0, prev - 1))
+                  }
+                  disabled={currentTutorialStep === 0}
+                  className="flex items-center gap-1 px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={18} />
+                  Previous
+                </button>
+
+                <div className="flex gap-2">
+                  {tutorialSteps.map((_, index) => (
+                    <div
+                      key={index}
+                      className={`w-2 h-2 rounded-full ${
+                        currentTutorialStep === index
+                          ? "bg-indigo-600"
+                          : "bg-gray-300 dark:bg-gray-600"
+                      }`}
+                    />
+                  ))}
                 </div>
 
-                {history.length === 0 ? (
-                  <div className="text-center py-12">
-                    <p className="text-lg text-zinc-600 dark:text-zinc-400 mb-6">
-                      You haven't taken any tests yet.
-                    </p>
-                  </div>
+                {currentTutorialStep < tutorialSteps.length - 1 ? (
+                  <button
+                    onClick={() =>
+                      setCurrentTutorialStep((prev) => prev + 1)
+                    }
+                    className="flex items-center gap-1 px-4 py-2 rounded-lg bg-indigo-600 text-white"
+                  >
+                    Next
+                    <ChevronRight size={18} />
+                  </button>
                 ) : (
-                  <>
-                    {/* Progress Graph */}
-                    <div id="progress-graph" className="mb-8">
-                      <h3 className="text-lg font-medium mb-4">Your Progress</h3>
-                      <div className="bg-zinc-50 dark:bg-zinc-700/30 p-4 rounded-lg">
-                        <Line data={chartData} options={chartOptions} />
-                      </div>
-                    </div>
-
-                    {/* History Table */}
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700">
-                        <thead className="bg-zinc-50 dark:bg-zinc-700/30">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
-                              Test Date
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
-                              Score
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
-                              Percentage
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
-                              Performance
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white dark:bg-zinc-800 divide-y divide-zinc-200 dark:divide-zinc-700">
-                          {history.map((entry) => {
-                            const percentage = ((entry.score / 40) * 100).toFixed(1);
-                            let performanceClass = "";
-                            let performanceText = "";
-                            
-                            if (percentage >= 80) {
-                              performanceClass = "text-green-600 dark:text-green-400";
-                              performanceText = "Excellent";
-                            } else if (percentage >= 60) {
-                              performanceClass = "text-blue-600 dark:text-blue-400";
-                              performanceText = "Good";
-                            } else if (percentage >= 40) {
-                              performanceClass = "text-yellow-600 dark:text-yellow-400";
-                              performanceText = "Average";
-                            } else {
-                              performanceClass = "text-red-600 dark:text-red-400";
-                              performanceText = "Needs Improvement";
-                            }
-
-                            return (
-                              <tr key={entry.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/30">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                                  {entry.createdAt?.toDate().toLocaleDateString('en-US', {
-                                    year: 'numeric',
-                                    month: 'short',
-                                    day: 'numeric'
-                                  }) || 'N/A'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-600 dark:text-zinc-300">
-                                  {entry.score}/40
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-600 dark:text-zinc-300">
-                                  {percentage}%
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                  <span className={`font-medium ${performanceClass}`}>
-                                    {performanceText}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
+                  <button
+                    onClick={closeTutorial}
+                    className="px-4 py-2 rounded-lg bg-indigo-600 text-white"
+                  >
+                    Got it!
+                  </button>
                 )}
               </div>
             </motion.div>
-          )}
-        </div>
-      </div>
-    </main>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
