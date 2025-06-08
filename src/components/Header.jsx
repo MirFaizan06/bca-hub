@@ -32,7 +32,12 @@ export default function Header() {
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (stored) {
-      setUser(JSON.parse(stored));
+      try {
+        setUser(JSON.parse(stored));
+      } catch (e) {
+        console.error("Error parsing user data:", e);
+        setUser(null);
+      }
     } else {
       setUser(null);
     }
@@ -106,17 +111,17 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
         {/* Logo / Title */}
         <Link to="/" className="flex items-center gap-2">
-          {/* Temporary logo placeholder - replace with actual image */}
-          <div className="relative">
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 dark:from-blue-700 dark:to-indigo-800 w-8 h-8 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xs">BH</span>
-            </div>
-            {/* Uncomment below when you have an actual logo */}
+          {/* Logo image option */}
+          <div className="flex items-center">
+            {/* Uncomment when you have logo */}
             {/* <img 
               src="/logo.png" 
               alt="BCA Hub Logo" 
-              className="h-8 w-auto"
+              className="h-8 w-auto mr-2"
             /> */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 dark:from-blue-700 dark:to-indigo-800 w-8 h-8 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-xs">BH</span>
+            </div>
           </div>
           <h1 className="text-xl font-bold text-zinc-900 dark:text-white">BCA Hub</h1>
         </Link>
@@ -167,7 +172,7 @@ export default function Header() {
                       {group.links.map((link, index) => (
                         link.to ? (
                           <Link
-                            key={index}
+                            key={`${group.name}-${index}`}
                             to={link.to}
                             className="flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition"
                           >
@@ -176,7 +181,7 @@ export default function Header() {
                           </Link>
                         ) : (
                           <button
-                            key={index}
+                            key={`${group.name}-${index}`}
                             onClick={link.action}
                             className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition"
                           >
@@ -269,7 +274,7 @@ export default function Header() {
                       {group.links.map((link, index) => (
                         link.to ? (
                           <Link
-                            key={index}
+                            key={`${group.name}-${index}`}
                             to={link.to}
                             className="flex items-center gap-3 py-2 text-zinc-600 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400"
                           >
@@ -278,7 +283,7 @@ export default function Header() {
                           </Link>
                         ) : (
                           <button
-                            key={index}
+                            key={`${group.name}-${index}`}
                             onClick={link.action}
                             className="flex items-center gap-3 w-full py-2 text-left text-zinc-600 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400"
                           >
