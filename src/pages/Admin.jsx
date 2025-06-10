@@ -1,4 +1,3 @@
-// src/pages/Admin.jsx
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -12,6 +11,8 @@ import {
   getDocs,
   addDoc,
   getDoc,
+  writeBatch,
+  serverTimestamp
 } from "firebase/firestore";
 import { auth, db } from "../utils/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -34,6 +35,9 @@ import {
   Clipboard,
   Calendar,
   Download,
+  Loader2,
+  Search,
+  AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
 import dayjs from "dayjs";
@@ -68,6 +72,9 @@ const TABS = [
   { key: "mockTests", label: "Mock Tests", icon: <Clipboard size={18} /> },
   { key: "attendance", label: "Attendance", icon: <Calendar size={18} /> },
 ];
+
+// Roll numbers for the class
+const ROLL_NUMBERS = Array.from({ length: 40 }, (_, i) => `24013${(i + 1).toString().padStart(2, '0')}`);
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -106,8 +113,29 @@ export default function Admin() {
   const [startDate, setStartDate] = useState(dayjs().startOf('month').format('YYYY-MM-DD'));
   const [endDate, setEndDate] = useState(dayjs().endOf('month').format('YYYY-MM-DD'));
   const [exportLoading, setExportLoading] = useState(false);
+  const [filterText, setFilterText] = useState("");
+  const [manualRecords, setManualRecords] = useState([]);
+  const [holidays, setHolidays] = useState([]);
+  const [newHoliday, setNewHoliday] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
+  const [showMobileWarning, setShowMobileWarning] = useState(false);
 
-    // Redirect non-admin users
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      setIsMobile(isMobileDevice);
+      if (isMobileDevice) {
+        setShowMobileWarning(true);
+      }
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Redirect non-admin users
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (!stored) {
@@ -342,6 +370,40 @@ export default function Admin() {
     }
   }, [activeTab]);
 
+  const handleDeleteLog = async (logId) => {
+    try {
+      await deleteDoc(doc(db, "logs", logId));
+      setLogs(prev => prev.filter(log => log.id !== logId));
+      toast.success("Log deleted successfully");
+    } catch (err) {
+      console.error("Error deleting log:", err);
+      toast.error("Failed to delete log");
+    }
+  };
+
+  const handleClearLogs = async () => {
+    if (!window.confirm("Are you sure you want to delete all logs? This cannot be undone.")) {
+      return;
+    }
+    
+    try {
+      const batch = writeBatch(db);
+      const logsCol = collection(db, "logs");
+      const logSnapshot = await getDocs(logsCol);
+      
+      logSnapshot.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      
+      await batch.commit();
+      setLogs([]);
+      toast.success("All logs deleted successfully");
+    } catch (err) {
+      console.error("Error clearing logs:", err);
+      toast.error("Failed to clear logs");
+    }
+  };
+
   // ───────────────────────── ANNOUNCEMENTS TAB ────────────────────
   useEffect(() => {
     const announcementsCol = collection(db, "announcements");
@@ -374,7 +436,7 @@ export default function Admin() {
       const logRef = collection(db, "logs");
       await addDoc(logRef, {
         message,
-        timestamp: new Date(),
+        timestamp: serverTimestamp(),
       });
     } catch (err) {
       console.error("Failed to log action:", err);
@@ -730,62 +792,224 @@ export default function Admin() {
 
   // ========= ATTENDANCE TAB =========
   useEffect(() => {
+    const fetchHolidays = async () => {
+      try {
+        const holidaysCol = collection(db, "holidays");
+        const snapshot = await getDocs(holidaysCol);
+        const holidayList = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setHolidays(holidayList);
+      } catch (err) {
+        console.error("Error fetching holidays:", err);
+        toast.error("Failed to load holidays");
+      }
+    };
+
     if (activeTab === "attendance") {
-      const fetchAttendance = async () => {
-        try {
-          const q = query(
-            collection(db, "attendanceRecords"),
-            where("date", ">=", startDate),
-            where("date", "<=", endDate)
-          );
-          
-          const querySnapshot = await getDocs(q);
-          const records = [];
-          
-          querySnapshot.forEach(doc => {
-            const data = doc.data();
-            records.push({
-              id: doc.id,
-              userId: data.userId,
-              name: data.name,
-              date: data.date,
-              timestamp: data.timestamp?.toDate() || new Date(),
-              deviceId: data.deviceId
-            });
-          });
-          
-          setAttendanceRecords(records);
-        } catch (err) {
-          console.error("Error fetching attendance:", err);
-          toast.error("Failed to load attendance records");
-        }
-      };
-      
       fetchAttendance();
+      fetchHolidays();
     }
   }, [activeTab, startDate, endDate]);
+
+  useEffect(() => {
+    if (activeTab === "attendance") {
+      fetchAttendance();
+    }
+  }, [manualRecords]);
+
+  const fetchAttendance = async () => {
+    try {
+      const q = query(
+        collection(db, "attendanceRecords"),
+        where("date", ">=", startDate),
+        where("date", "<=", endDate)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const records = [];
+      
+      querySnapshot.forEach(doc => {
+        const data = doc.data();
+        records.push({
+          id: doc.id,
+          userId: data.userId,
+          name: data.name,
+          date: data.date,
+          timestamp: data.timestamp?.toDate() || new Date(),
+          deviceId: data.deviceId
+        });
+      });
+      
+      // Combine with manual records
+      const combinedRecords = [...records, ...manualRecords];
+      
+      // Filter by search text if exists
+      const filteredRecords = filterText 
+        ? combinedRecords.filter(record => 
+            record.userId.includes(filterText) || 
+            (record.name && record.name.toLowerCase().includes(filterText.toLowerCase())))
+        : combinedRecords;
+      
+      setAttendanceRecords(filteredRecords);
+    } catch (err) {
+      console.error("Error fetching attendance:", err);
+      toast.error("Failed to load attendance records");
+    }
+  };
+
+  const calculateAttendanceStats = () => {
+    if (attendanceRecords.length === 0) return { present: 0, absent: 0, percentage: 0 };
+    
+    // Get unique dates in the range
+    const datesInRange = [];
+    let currentDate = dayjs(startDate);
+    const endDateObj = dayjs(endDate);
+    
+    while (currentDate.isBefore(endDateObj) || currentDate.isSame(endDateObj)) {
+      // Skip Sundays and holidays
+      const dayOfWeek = currentDate.day();
+      const dateStr = currentDate.format('YYYY-MM-DD');
+      const isHoliday = holidays.some(h => h.date === dateStr);
+      
+      if (dayOfWeek !== 0 && !isHoliday) {
+        datesInRange.push(dateStr);
+      }
+      currentDate = currentDate.add(1, 'day');
+    }
+    
+    // Count attendance per student
+    const studentStats = {};
+    ROLL_NUMBERS.forEach(roll => {
+      studentStats[roll] = { present: 0, total: datesInRange.length };
+    });
+    
+    attendanceRecords.forEach(record => {
+      if (studentStats[record.userId]) {
+        studentStats[record.userId].present++;
+      }
+    });
+    
+    // Calculate overall stats
+    let totalPresent = 0;
+    let totalPossible = 0;
+    
+    Object.values(studentStats).forEach(stats => {
+      totalPresent += stats.present;
+      totalPossible += stats.total;
+    });
+    
+    const percentage = totalPossible > 0 
+      ? Math.round((totalPresent / totalPossible) * 100) 
+      : 0;
+    
+    return {
+      present: totalPresent,
+      absent: totalPossible - totalPresent,
+      percentage
+    };
+  };
+
+  const stats = calculateAttendanceStats();
+
+  const handleAddHoliday = async () => {
+    if (!newHoliday) {
+      toast.error("Please enter a date");
+      return;
+    }
+    
+    try {
+      const holidayRef = await addDoc(collection(db, "holidays"), {
+        date: newHoliday,
+        createdAt: serverTimestamp()
+      });
+      
+      setHolidays(prev => [...prev, { id: holidayRef.id, date: newHoliday }]);
+      setNewHoliday("");
+      toast.success("Holiday added successfully");
+    } catch (err) {
+      console.error("Error adding holiday:", err);
+      toast.error("Failed to add holiday");
+    }
+  };
+
+  const handleDeleteHoliday = async (holidayId) => {
+    try {
+      await deleteDoc(doc(db, "holidays", holidayId));
+      setHolidays(prev => prev.filter(h => h.id !== holidayId));
+      toast.success("Holiday removed successfully");
+    } catch (err) {
+      console.error("Error deleting holiday:", err);
+      toast.error("Failed to delete holiday");
+    }
+  };
+
+  const handleMarkAttendance = (userId, name, date, isPresent) => {
+    if (isPresent) {
+      // Add manual record
+      setManualRecords(prev => [
+        ...prev,
+        {
+          id: `manual-${Date.now()}`,
+          userId,
+          name,
+          date,
+          timestamp: new Date(),
+          deviceId: "manual"
+        }
+      ]);
+      toast.success(`Marked ${userId} as present for ${date}`);
+    } else {
+      // Remove manual record if exists
+      setManualRecords(prev => prev.filter(record => 
+        !(record.userId === userId && record.date === date)
+      ));
+      toast.success(`Marked ${userId} as absent for ${date}`);
+    }
+  };
 
   const exportToExcel = () => {
     setExportLoading(true);
     
     try {
+      // Create a set of all unique dates in the range
+      const uniqueDates = [...new Set(attendanceRecords.map(r => r.date))].sort();
+      
+      // Create a map of student attendance
+      const studentAttendance = {};
+      ROLL_NUMBERS.forEach(roll => {
+        studentAttendance[roll] = {};
+        uniqueDates.forEach(date => {
+          studentAttendance[roll][date] = "Absent";
+        });
+      });
+      
+      // Mark present students
+      attendanceRecords.forEach(record => {
+        if (studentAttendance[record.userId]) {
+          studentAttendance[record.userId][record.date] = "Present";
+        }
+      });
+      
       // Format data for Excel
-      const formattedData = attendanceRecords.map(record => ({
-        "Roll Number": record.userId,
-        "Name": record.name,
-        "Date": record.date,
-        "Time": dayjs(record.timestamp).format('hh:mm A'),
-        "Device ID": record.deviceId
-      }));
+      const formattedData = ROLL_NUMBERS.map(roll => {
+        const row = { "Roll Number": roll };
+        uniqueDates.forEach(date => {
+          row[date] = studentAttendance[roll][date] || "Absent";
+        });
+        return row;
+      });
       
       // Create worksheet and workbook
       const ws = XLSX.utils.json_to_sheet(formattedData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Attendance");
       
-      // Generate file name with month
-      const monthName = dayjs(startDate).format('MMMM');
-      const fileName = `bca-major-attendance-${monthName}.xlsx`;
+      // Generate file name with date range
+      const start = dayjs(startDate).format('DD-MMM');
+      const end = dayjs(endDate).format('DD-MMM');
+      const fileName = `attendance-${start}-to-${end}.xlsx`;
       
       // Export file
       XLSX.writeFile(wb, fileName);
@@ -801,6 +1025,29 @@ export default function Admin() {
     return (
     <main className="min-h-screen bg-gradient-to-b from-zinc-50 to-zinc-100 dark:from-zinc-900 dark:to-zinc-950 text-zinc-800 dark:text-zinc-100 py-12 px-4">
       <div className="max-w-7xl mx-auto space-y-8">
+        {showMobileWarning && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-amber-100 dark:bg-amber-900/50 border border-amber-300 dark:border-amber-700 rounded-xl p-4 flex items-start gap-3"
+          >
+            <AlertTriangle className="text-amber-600 dark:text-amber-400 mt-1 flex-shrink-0" />
+            <div>
+              <h3 className="font-bold text-amber-800 dark:text-amber-200">Mobile Device Detected</h3>
+              <p className="text-amber-700 dark:text-amber-300 text-sm">
+                For a better experience, we recommend using the Admin Panel on a PC or desktop.
+                Some features may not work properly on mobile devices.
+              </p>
+            </div>
+            <button 
+              onClick={() => setShowMobileWarning(false)}
+              className="text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 ml-auto"
+            >
+              <X size={20} />
+            </button>
+          </motion.div>
+        )}
+
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1232,11 +1479,19 @@ export default function Admin() {
                 transition={{ duration: 0.4 }}
                 className="space-y-6"
               >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-0.5 bg-blue-600 dark:bg-blue-500"></div>
-                  <h2 className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                    System Logs
-                  </h2>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-0.5 bg-blue-600 dark:bg-blue-500"></div>
+                    <h2 className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      System Logs
+                    </h2>
+                  </div>
+                  <button
+                    onClick={handleClearLogs}
+                    className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm"
+                  >
+                    <Trash2 size={16} /> Clear All Logs
+                  </button>
                 </div>
 
                 {logs.length === 0 ? (
@@ -1257,13 +1512,20 @@ export default function Admin() {
                       <motion.div
                         key={log.id}
                         variants={slideUp}
-                        className="bg-zinc-50 dark:bg-zinc-900/30 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm"
+                        className="relative bg-zinc-50 dark:bg-zinc-900/30 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm"
                       >
+                        <button
+                          onClick={() => handleDeleteLog(log.id)}
+                          className="absolute top-4 right-4 text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                        
                         <p className="text-zinc-700 dark:text-zinc-300 mb-2">
                           {log.message}
                         </p>
                         <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                          {dayjs(log.timestamp).format("DD MMM YYYY, hh:mm A")}
+                          {log.timestamp ? dayjs(log.timestamp).format("DD MMM YYYY, hh:mm A") : "Invalid Date"}
                         </p>
                       </motion.div>
                     ))}
@@ -1435,62 +1697,111 @@ export default function Admin() {
 
                       {isEditing ? (
                         <div className="flex flex-col gap-4">
-                          {/* Toolbar */}
-                          <div className="flex flex-wrap gap-2 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
-                            <button
-                              type="button"
-                              onClick={() => execCommand("bold")}
-                              className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600"
-                              title="Bold"
-                            >
-                              <strong>B</strong>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => execCommand("italic")}
-                              className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600"
-                              title="Italic"
-                            >
-                              <em>I</em>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => execCommand("underline")}
-                              className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600"
-                              title="Underline"
-                            >
-                              <u>U</u>
-                            </button>
-                            <select
-                              onChange={(e) =>
-                                execCommand("fontSize", e.target.value)
-                              }
-                              className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600"
-                              title="Font Size"
-                            >
-                              <option value="">Size</option>
-                              {[1, 2, 3, 4, 5, 6, 7].map((size) => (
-                                <option key={size} value={size}>
-                                  {size}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() => execCommand("insertUnorderedList")}
-                              className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600"
-                              title="Bullet List"
-                            >
-                              • List
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => execCommand("insertOrderedList")}
-                              className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600"
-                              title="Numbered List"
-                            >
-                              1. List
-                            </button>
+                          {/* Floating Toolbar */}
+                          <div className="sticky top-0 z-10 flex flex-wrap gap-2 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-lg shadow-md">
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => execCommand("bold")}
+                                className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600 font-bold"
+                                title="Bold"
+                              >
+                                B
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => execCommand("italic")}
+                                className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600 italic"
+                                title="Italic"
+                              >
+                                I
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => execCommand("underline")}
+                                className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600 underline"
+                                title="Underline"
+                              >
+                                U
+                              </button>
+                            </div>
+                            
+                            <div className="flex gap-2">
+                              <select
+                                onChange={(e) => execCommand("fontSize", e.target.value)}
+                                className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600"
+                                title="Font Size"
+                              >
+                                <option value="">Font Size</option>
+                                <option value="1">8pt</option>
+                                <option value="2">10pt</option>
+                                <option value="3">12pt</option>
+                                <option value="4">14pt</option>
+                                <option value="5">18pt</option>
+                                <option value="6">24pt</option>
+                                <option value="7">36pt</option>
+                              </select>
+                              
+                              <select
+                                onChange={(e) => execCommand("formatBlock", e.target.value)}
+                                className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600"
+                                title="Paragraph Format"
+                              >
+                                <option value="p">Paragraph</option>
+                                <option value="h1">Heading 1</option>
+                                <option value="h2">Heading 2</option>
+                                <option value="h3">Heading 3</option>
+                                <option value="h4">Heading 4</option>
+                                <option value="h5">Heading 5</option>
+                                <option value="h6">Heading 6</option>
+                              </select>
+                            </div>
+                            
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => execCommand("insertUnorderedList")}
+                                className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600"
+                                title="Bullet List"
+                              >
+                                • List
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => execCommand("insertOrderedList")}
+                                className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600"
+                                title="Numbered List"
+                              >
+                                1. List
+                              </button>
+                            </div>
+                            
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => execCommand("justifyLeft")}
+                                className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600"
+                                title="Align Left"
+                              >
+                                L
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => execCommand("justifyCenter")}
+                                className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600"
+                                title="Center"
+                              >
+                                C
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => execCommand("justifyRight")}
+                                className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600"
+                                title="Align Right"
+                              >
+                                R
+                              </button>
+                            </div>
                           </div>
 
                           {/* contentEditable region */}
@@ -2009,7 +2320,24 @@ export default function Admin() {
                   </h2>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                {/* Statistics */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+                    <p className="text-sm text-green-800 dark:text-green-300">Present</p>
+                    <p className="text-2xl font-bold">{stats.present}</p>
+                  </div>
+                  <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg">
+                    <p className="text-sm text-red-800 dark:text-red-300">Absent</p>
+                    <p className="text-2xl font-bold">{stats.absent}</p>
+                  </div>
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                    <p className="text-sm text-blue-800 dark:text-blue-300">Percentage</p>
+                    <p className="text-2xl font-bold">{stats.percentage}%</p>
+                  </div>
+                </div>
+
+                {/* Filters and Controls */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                   <div>
                     <label className="block text-sm font-medium mb-1">Start Date</label>
                     <input
@@ -2029,26 +2357,79 @@ export default function Admin() {
                       className="w-full border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Search Student</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={filterText}
+                        onChange={(e) => setFilterText(e.target.value)}
+                        placeholder="Roll or Name"
+                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <Search className="absolute left-3 top-2.5 text-zinc-400" size={18} />
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-end">
+                    <button
+                      onClick={exportToExcel}
+                      disabled={exportLoading}
+                      className="w-full bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 text-white font-medium py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all flex items-center justify-center disabled:opacity-70"
+                    >
+                      {exportLoading ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          Exporting...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-5 w-5 mr-2" />
+                          Export to Excel
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
-                <button
-                  onClick={exportToExcel}
-                  disabled={exportLoading || attendanceRecords.length === 0}
-                  className="bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 text-white font-medium py-2 px-6 rounded-lg shadow-md hover:shadow-lg transition-all flex items-center mb-6 disabled:opacity-70"
-                >
-                  {exportLoading ? (
-                    <>
-                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                      Exporting...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="h-5 w-5 mr-2" />
-                      Export to Excel
-                    </>
-                  )}
-                </button>
+                {/* Holiday Management */}
+                <div className="bg-zinc-50 dark:bg-zinc-900/30 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700 mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold">Holiday Management</h3>
+                  </div>
+                  
+                  <div className="flex gap-2 mb-4">
+                    <input
+                      type="date"
+                      value={newHoliday}
+                      onChange={(e) => setNewHoliday(e.target.value)}
+                      className="flex-1 px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800"
+                    />
+                    <button
+                      onClick={handleAddHoliday}
+                      className="bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white px-4 rounded-lg"
+                    >
+                      Add Holiday
+                    </button>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                    {holidays.map(holiday => (
+                      <div key={holiday.id} className="flex justify-between items-center bg-amber-100 dark:bg-amber-900/20 p-3 rounded-lg">
+                        <span>{holiday.date}</span>
+                        <button 
+                          onClick={() => handleDeleteHoliday(holiday.id)}
+                          className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
+                {/* Attendance Table */}
                 {attendanceRecords.length === 0 ? (
                   <div className="text-center py-8 bg-zinc-50 dark:bg-zinc-900/30 rounded-xl">
                     <div className="bg-blue-100 dark:bg-blue-900/20 p-4 rounded-full inline-block mb-4">
@@ -2067,19 +2448,19 @@ export default function Admin() {
                       <thead>
                         <tr className="bg-zinc-100 dark:bg-zinc-700/50">
                           <th className="py-3 px-4 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300 rounded-l-xl">
-                            Date
-                          </th>
-                          <th className="py-3 px-4 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300">
                             Roll Number
                           </th>
                           <th className="py-3 px-4 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300">
                             Name
                           </th>
                           <th className="py-3 px-4 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                            Date
+                          </th>
+                          <th className="py-3 px-4 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300">
                             Time
                           </th>
                           <th className="py-3 px-4 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300 rounded-r-xl">
-                            Device ID
+                            Status
                           </th>
                         </tr>
                       </thead>
@@ -2089,16 +2470,32 @@ export default function Admin() {
                             key={record.id}
                             className="border-b border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700/10"
                           >
-                            <td className="py-3 px-4">{record.date}</td>
                             <td className="py-3 px-4">{record.userId}</td>
                             <td className="py-3 px-4 font-medium">
                               {record.name}
                             </td>
+                            <td className="py-3 px-4">{record.date}</td>
                             <td className="py-3 px-4">
-                              {dayjs(record.timestamp).format('hh:mm A')}
+                              {record.timestamp ? dayjs(record.timestamp).format('hh:mm A') : 'Invalid Date'}
                             </td>
-                            <td className="py-3 px-4 text-sm font-mono">
-                              {record.deviceId.substring(0, 8)}...
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2 py-1 rounded-full text-xs ${
+                                  record.deviceId === "manual" 
+                                    ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                    : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                                }`}>
+                                  {record.deviceId === "manual" ? "Manual" : "Present"}
+                                </span>
+                                {record.deviceId === "manual" && (
+                                  <button
+                                    onClick={() => handleMarkAttendance(record.userId, record.name, record.date, false)}
+                                    className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 text-sm"
+                                  >
+                                    Mark Absent
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -2106,6 +2503,47 @@ export default function Admin() {
                     </table>
                   </div>
                 )}
+
+                {/* Manual Attendance Marking */}
+                <div className="bg-zinc-50 dark:bg-zinc-900/30 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700 mt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold">Manual Attendance</h3>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Roll Number</label>
+                      <select
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800"
+                      >
+                        {ROLL_NUMBERS.map(roll => (
+                          <option key={roll} value={roll}>{roll}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Date</label>
+                      <input
+                        type="date"
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800"
+                      />
+                    </div>
+                    
+                    <div className="flex items-end gap-2">
+                      <button
+                        className="flex-1 bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 text-white py-2 px-4 rounded-lg"
+                      >
+                        Mark Present
+                      </button>
+                      <button
+                        className="flex-1 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white py-2 px-4 rounded-lg"
+                      >
+                        Mark Absent
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </motion.div>
             )}
           </div>
