@@ -30,14 +30,15 @@ const COLLEGE_LOCATION = {
   longitude: 74.77766561630118,
   radius: 200 // Radius in meters
 };
- 
-// college address: 34.080264121003225, 74.77766561630118
+
+// Maximum acceptable GPS accuracy
+const MAX_ACCEPTABLE_ACCURACY = 100; // meters
 
 export default function AttendanceMarkPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [status, setStatus] = useState('checking'); // checking, validating, invalid, alreadyMarked, marked, locationError, outsideRange
+  const [status, setStatus] = useState('checking'); // checking, validating, invalid, alreadyMarked, marked, locationError, outsideRange, accuracyError
   const [user, setUser] = useState(null);
   const [positionError, setPositionError] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
@@ -56,6 +57,29 @@ export default function AttendanceMarkPage() {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   };
+
+  // Track permission changes
+  useEffect(() => {
+    if (!navigator.permissions) return;
+    
+    const trackPermission = async () => {
+      try {
+        const permissionStatus = await navigator.permissions.query({ 
+          name: 'geolocation' 
+        });
+        
+        permissionStatus.onchange = () => {
+          if (permissionStatus.state === 'granted') {
+            handleRetry();
+          }
+        };
+      } catch (err) {
+        console.error('Permission API error:', err);
+      }
+    };
+    
+    trackPermission();
+  }, []);
 
   // Entry point: verify login, then check if already marked, then check location
   useEffect(() => {
@@ -126,26 +150,52 @@ export default function AttendanceMarkPage() {
     navigator.geolocation.getCurrentPosition(
       pos => {
         const { latitude, longitude, accuracy } = pos.coords;
+        setCurrentLocation({ latitude, longitude });
+        setAccuracy(accuracy);
+        
+        // Check if accuracy is acceptable
+        if (accuracy > MAX_ACCEPTABLE_ACCURACY) {
+          setStatus('accuracyError');
+          return;
+        }
+
         const dist = calculateDistance(
           latitude,
           longitude,
           COLLEGE_LOCATION.latitude,
           COLLEGE_LOCATION.longitude
         );
-        setCurrentLocation({ latitude, longitude });
-        setAccuracy(accuracy);
         setDistance(dist);
 
+        // Apply buffer to distance calculation
+        const buffer = accuracy * 0.5;
+        const effectiveDistance = dist - buffer;
+
         // Consider both distance and accuracy for location validation
-        if (dist + accuracy <= COLLEGE_LOCATION.radius) {
-          markAttendance(date, token, user, { latitude, longitude, accuracy, dist });
+        if (effectiveDistance <= COLLEGE_LOCATION.radius) {
+          markAttendance(date, token, user, { 
+            latitude, 
+            longitude, 
+            accuracy, 
+            dist 
+          });
         } else {
           setStatus('outsideRange');
         }
       },
       err => {
         console.error('Geolocation error:', err);
-        setPositionError(err);
+        
+        // Handle permission denial specifically
+        if (err.code === 1) {
+          setPositionError({
+            ...err,
+            message: "Location access is required. Please enable permissions in your browser settings."
+          });
+        } else {
+          setPositionError(err);
+        }
+        
         setStatus('locationError');
       },
       {
@@ -245,9 +295,7 @@ export default function AttendanceMarkPage() {
               <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
               <p className="text-lg mb-2">Location access required</p>
               <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6 text-center">
-                {positionError?.message === 'User denied Geolocation' 
-                  ? 'You must allow location access to mark attendance. This helps verify you are physically present in class.'
-                  : positionError?.message || 'We need your location to verify you are at the college.'}  
+                {positionError?.message || 'We need your location to verify you are at the college.'}  
               </p>
               <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg mb-6 w-full">
                 <div className="flex items-start">
@@ -255,6 +303,36 @@ export default function AttendanceMarkPage() {
                   <p className="text-sm text-amber-800 dark:text-amber-300">
                     If you denied permission, you'll need to enable location in your browser settings and try again
                   </p>
+                </div>
+              </div>
+              <button
+                onClick={handleRetry}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg shadow-md"
+              >
+                Try Again
+              </button>
+            </div>
+          )}
+
+          {status === 'accuracyError' && (
+            <div className="flex flex-col items-center py-12">
+              <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
+              <p className="text-lg mb-2">Poor GPS Accuracy</p>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6 text-center">
+                Your device reported unreliable location data (Accuracy: ±{Math.round(accuracy)} meters)
+              </p>
+              <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg mb-6 w-full">
+                <div className="flex items-start">
+                  <Info className="h-5 w-5 text-amber-600 dark:text-amber-400 mr-2 mt-0.5" />
+                  <div className="text-sm text-amber-800 dark:text-amber-300">
+                    <p>Try these solutions:</p>
+                    <ul className="list-disc pl-5 mt-2 space-y-1">
+                      <li>Enable WiFi/GPS on your device</li>
+                      <li>Move near a window</li>
+                      <li>Restart your device's location services</li>
+                      <li>Use a different browser</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
               <button
