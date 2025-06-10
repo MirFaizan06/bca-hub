@@ -28,7 +28,7 @@ const generateDeviceId = () => {
 const COLLEGE_LOCATION = {
   latitude: 34.080264121003225,
   longitude: 74.77766561630118,
-  radius: 50 // Radius in meters
+  radius: 200 // Radius in meters
 };
  
 // college address: 34.080264121003225, 74.77766561630118
