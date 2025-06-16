@@ -28,7 +28,7 @@ const generateDeviceId = () => {
 const COLLEGE_LOCATION = {
   latitude: 34.079268684616096,
   longitude: 74.77918656108436,
-  radius: 50 // Radius in meters
+  radius: 10 // Radius in meters
 };
 
 // Maximum acceptable GPS accuracy
