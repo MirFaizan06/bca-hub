@@ -24,10 +24,10 @@ const generateDeviceId = () => {
   }
   return deviceId;
 };
-
+ 
 const COLLEGE_LOCATION = {
-  latitude: 34.079268684616096,
-  longitude: 74.77918656108436,
+  latitude: 34.07919278239468,
+  longitude: 74.77917861004909,
   radius: 10 // Radius in meters
 };
 
