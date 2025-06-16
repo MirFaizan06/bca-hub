@@ -58,13 +58,14 @@ export default function AttendanceMarkPage() {
     return R * c;
   };
 
+  useEffect(() => {
+    document.title = "BCA Hub | Attendance Markup";
+  }, [])
   // Track permission changes
   useEffect(() => {
     if (!navigator.permissions) return;
 
-  useEffect(() => {
-    document.title = "BCA Hub | Attendance Markup";
-  }, [])
+  
     
     const trackPermission = async () => {
       try {
