@@ -12,7 +12,7 @@ export default function Contact() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    document.title = "BCA Hub | Attendance Markup";
+    document.title = "BCA Hub | Contact";
   }, []);
 
   const handleChange = (e) => {

@@ -62,6 +62,11 @@ export default function Dashboard() {
     { title: "Performance Insights", content: "View your test statistics and improvement over time." },
     { title: "Mock Test History", content: "Review all your past tests and performance ratings." },
   ];
+
+  useEffect(() => {
+      document.title = "BCA Hub | Dashboard";
+    }, []);
+  
   useEffect(() => {
     if (!localStorage.getItem("dashboardTutorialShown")) {
       setShowTutorial(true);

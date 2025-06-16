@@ -47,6 +47,10 @@ export default function Progress() {
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState("month");
 
+  useEffect(() => {
+      document.title = "BCA Hub | Progress";
+    }, []);
+  
   // Get user data from localStorage
   useEffect(() => {
     const storedUser = localStorage.getItem("user");

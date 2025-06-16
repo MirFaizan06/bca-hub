@@ -148,6 +148,11 @@ export default function MockTests() {
     }
   };
 
+  useEffect(() => {
+      document.title = "BCA Hub | Mock Tests";
+    }, []);
+  
+
   // Timer countdown effect
   useEffect(() => {
     if (screen !== "quiz") return;
