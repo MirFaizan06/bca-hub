@@ -26,9 +26,9 @@ const generateDeviceId = () => {
 };
 
 const COLLEGE_LOCATION = {
-  latitude: 34.080264121003225,
-  longitude: 74.77766561630118,
-  radius: 100 // Radius in meters
+  latitude: 34.079268684616096,
+  longitude: 74.77918656108436,
+  radius: 50 // Radius in meters
 };
 
 // Maximum acceptable GPS accuracy
@@ -61,6 +61,7 @@ export default function AttendanceMarkPage() {
   useEffect(() => {
     document.title = "BCA Hub | Attendance Markup";
   }, [])
+
   // Track permission changes
   useEffect(() => {
     if (!navigator.permissions) return;
