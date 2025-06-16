@@ -19,6 +19,11 @@ export default function AttendanceAdmin() {
   const today = format(new Date(), 'yyyy-MM-dd');
   const adminRollNumber = localStorage.getItem('rememberedRoll'); // Assuming roll number is stored in local storage
 
+  useEffect(() => {
+      document.title = "BCA Hub | Attendance Admin";
+    }, []);
+  
+
   // Check if token exists for today
   useEffect(() => {
     const fetchToken = async () => {

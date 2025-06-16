@@ -31,6 +31,11 @@ export default function Announcements() {
   const [sortBy, setSortBy] = useState("recent");
   const [searchQuery, setSearchQuery] = useState("");
 
+  useEffect(() => {
+    document.title = "BCA Hub | Achievements";
+  }, []);
+
+
   // Fetch announcements from Firebase
   useEffect(() => {
     const fetchAnnouncements = async () => {

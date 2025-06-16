@@ -33,6 +33,11 @@ export default function Chats() {
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
 
+  useEffect(() => {
+      document.title = "BCA Hub | Chats";
+    }, []);
+  
+
   // 1. Auth check
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {

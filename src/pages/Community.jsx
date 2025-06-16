@@ -40,6 +40,11 @@ export default function Community() {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
+      document.title = "BCA Hub | Community";
+    }, []);
+  
+
+  useEffect(() => {
     let unsubscribeTests;
 
     async function init() {

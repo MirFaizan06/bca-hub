@@ -143,6 +143,10 @@ export default function Achievements() {
   });
   const [newAch, setNewAch] = useState(null);
 
+  useEffect(() => {
+    document.title = "BCA Hub | Achievements";
+  }, []);
+
   // Auth listener
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {

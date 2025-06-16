@@ -64,6 +64,11 @@ export default function Attendance() {
   }, [navigate]);
 
   useEffect(() => {
+      document.title = "BCA Hub | Attendance";
+    }, []);
+  
+
+  useEffect(() => {
     fetchAttendance();
   }, [fetchAttendance]);
 

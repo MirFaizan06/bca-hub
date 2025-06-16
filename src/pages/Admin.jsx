@@ -124,6 +124,11 @@ export default function Admin() {
   const [newRollNumber, setNewRollNumber] = useState("");
   const [newStudentName, setNewStudentName] = useState("");
 
+  useEffect(() => {
+    document.title = "BCA Hub | Admin";
+  }, []);
+
+
   // Detect mobile device
   useEffect(() => {
     const checkMobile = () => {
