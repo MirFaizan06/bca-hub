@@ -11,18 +11,7 @@ import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { httpsCallable, getFunctions } from "firebase/functions";
 import dayjs from "dayjs";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Send,
-  ArrowLeft,
-  Smile,
-  Paperclip,
-  Mic,
-  MoreVertical,
-  Check,
-  CheckCheck,
-  User,
-  MessageSquare,
-} from "lucide-react";
+import { Send, ArrowLeft, User, MessageSquare, CheckCheck } from "lucide-react";
 
 // Helper: Count words
 const countWords = (str) => str.trim().split(/\s+/).filter(Boolean).length;
@@ -34,7 +23,7 @@ export default function Chats() {
   const sendChatMessage = httpsCallable(functions, "sendChatMessage");
 
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
+  const [user, setUser ] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newText, setNewText] = useState("");
   const [error, setError] = useState("");
@@ -51,9 +40,9 @@ export default function Chats() {
         navigate("/login");
       } else {
         console.log("Authenticated user:", u.email);
-        setUser(u);
+        setUser (u);
         // Add user to online list
-        setOnlineUsers(prev => [...new Set([...prev, u.displayName || u.email])]);
+        setOnlineUsers((prev) => [...new Set([...prev, u.displayName || u.email])]);
       }
     });
     return () => unsubscribe();
@@ -136,7 +125,7 @@ export default function Chats() {
   };
 
   // Check if message is from current user
-  const isCurrentUser = (msg) => {
+  const isCurrentUser  = (msg) => {
     return msg.userId === user?.uid;
   };
 
@@ -163,7 +152,7 @@ export default function Chats() {
           <div className="relative">
             <div className="w-3 h-3 bg-green-500 rounded-full absolute -top-0.5 -right-0.5 border-2 border-white dark:border-zinc-800"></div>
             <div className="bg-blue-100 dark:bg-blue-900/30 w-8 h-8 rounded-full flex items-center justify-center">
-              <User size={18} className="text-blue-600 dark:text-blue-400" />
+              <User  size={18} className="text-blue-600 dark:text-blue-400" />
             </div>
           </div>
         </div>
@@ -192,10 +181,10 @@ export default function Chats() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
-                className={`flex ${isCurrentUser(msg) ? 'justify-end' : 'justify-start'}`}
+                className={`flex ${isCurrentUser (msg) ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[85%] flex gap-3 ${isCurrentUser(msg) ? 'flex-row-reverse' : ''}`}
+                  className={`max-w-[85%] flex gap-3 ${isCurrentUser (msg) ? 'flex-row-reverse' : ''}`}
                 >
                   {/* Avatar */}
                   <div className="flex-shrink-0">
@@ -217,24 +206,24 @@ export default function Chats() {
                   {/* Message Bubble */}
                   <div
                     className={`rounded-2xl p-4 ${
-                      isCurrentUser(msg)
+                      isCurrentUser (msg)
                         ? "bg-blue-500 text-white rounded-br-none"
                         : "bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 rounded-bl-none shadow-sm"
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <span className={`font-semibold ${isCurrentUser(msg) ? 'text-blue-100' : 'text-blue-600 dark:text-blue-400'}`}>
+                      <span className={`font-semibold ${isCurrentUser (msg) ? 'text-blue-100' : 'text-blue-600 dark:text-blue-400'}`}>
                         {msg.name || msg.rollNumber || "Anonymous"}
                       </span>
-                      <span className={`text-xs ${isCurrentUser(msg) ? 'text-blue-200' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                      <span className={`text-xs ${isCurrentUser (msg) ? 'text-blue-200' : 'text-zinc-500 dark:text-zinc-400'}`}>
                         {formatTime(msg.createdAt?.toDate?.() || new Date())}
                       </span>
                     </div>
                     
                     <p>{msg.text}</p>
                     
-                    <div className={`mt-2 flex items-center ${isCurrentUser(msg) ? 'justify-end' : 'justify-start'}`}>
-                      {isCurrentUser(msg) && (
+                    <div className={`mt-2 flex items-center ${isCurrentUser (msg) ? 'justify-end' : 'justify-start'}`}>
+                      {isCurrentUser (msg) && (
                         <div className="text-blue-200 flex items-center gap-1">
                           <CheckCheck size={14} />
                           <span className="text-xs">Delivered</span>
@@ -282,21 +271,6 @@ export default function Chats() {
           </AnimatePresence>
 
           <div className="flex gap-2">
-            <div className="flex gap-1">
-              <button
-                type="button"
-                className="p-2 text-zinc-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/10 transition"
-              >
-                <Smile size={20} />
-              </button>
-              <button
-                type="button"
-                className="p-2 text-zinc-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/10 transition"
-              >
-                <Paperclip size={20} />
-              </button>
-            </div>
-            
             <div className="flex-1 relative">
               <textarea
                 ref={inputRef}
@@ -314,12 +288,6 @@ export default function Chats() {
                 <span className="text-xs text-zinc-500 dark:text-zinc-400">
                   {500 - countWords(newText)}
                 </span>
-                <button
-                  type="button"
-                  className="p-1 text-zinc-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/10 transition"
-                >
-                  <Mic size={18} />
-                </button>
               </div>
             </div>
             

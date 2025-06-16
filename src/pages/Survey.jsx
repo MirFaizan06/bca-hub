@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { db } from "../utils/firebase";
 import { collection, addDoc } from "firebase/firestore";
 import { motion } from "framer-motion";
@@ -12,6 +12,7 @@ import {
   MessageSquare,
   CheckCircle
 } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom"; // Added useNavigate
 
 export default function Survey() {
   const [form, setForm] = useState({
@@ -26,6 +27,7 @@ export default function Survey() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(0);
+  const navigate = useNavigate(); // For redirection
 
   const questions = [
     { name: "rollNumber", label: "Roll Number", icon: <Hash size={18} /> },
@@ -35,6 +37,20 @@ export default function Survey() {
     { name: "recommend", label: "Recommend to Others", icon: <ThumbsUp size={18} /> },
     { name: "generalFeedback", label: "General Feedback", icon: <MessageSquare size={18} /> },
   ];
+
+  // Fix 1: Calculate progress percentage correctly
+  const progressPercentage = Math.round((currentQuestion / (questions.length - 1)) * 100);
+
+  useEffect(() => {
+    // Fix 2: Handle redirection after submission
+    if (submitted) {
+      const timer = setTimeout(() => {
+        navigate("/home");
+      }, 3000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [submitted, navigate]);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -110,8 +126,16 @@ export default function Survey() {
             Your feedback has been submitted successfully. We appreciate your time and will use your suggestions to improve BCA Hub.
           </p>
           
+          {/* Added redirect loader */}
+          <div className="flex flex-col items-center mb-6">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Redirecting to home in 3 seconds...
+            </p>
+          </div>
+          
           <Link
-            to="/"
+            to="/home"
             className="inline-block bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-medium py-2 px-6 rounded-full shadow-md hover:shadow-lg transition-all"
           >
             Back to Home
@@ -142,21 +166,21 @@ export default function Survey() {
         </div>
 
         <div className="p-8">
-          {/* Progress Bar */}
+          {/* Progress Bar - Fixed calculation */}
           <div className="mb-8">
             <div className="flex justify-between mb-2">
               <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
                 Question {currentQuestion + 1} of {questions.length}
               </span>
               <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                {Math.round(((currentQuestion + 1) / questions.length) * 100)}% Complete
+                {progressPercentage}% Complete
               </span>
             </div>
             <div className="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-2.5">
               <motion.div 
                 className="bg-gradient-to-r from-indigo-500 to-purple-600 h-2.5 rounded-full"
                 initial={{ width: 0 }}
-                animate={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
+                animate={{ width: `${progressPercentage}%` }}
                 transition={{ duration: 0.5 }}
               ></motion.div>
             </div>

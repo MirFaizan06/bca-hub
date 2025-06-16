@@ -4,17 +4,20 @@ import { motion } from 'framer-motion';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase';
 import { QRCodeSVG } from 'qrcode.react';
-import { format, addDays } from 'date-fns';
+import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { Loader2, RefreshCw, Copy, Shield } from 'lucide-react';
+import { Loader2, RefreshCw, Copy, Shield, XCircle } from 'lucide-react';
 
 export default function AttendanceAdmin() {
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [url, setUrl] = useState('');
+  const [isValid, setIsValid] = useState(true);
+  const [showUrl, setShowUrl] = useState(false);
 
   const today = format(new Date(), 'yyyy-MM-dd');
+  const adminRollNumber = localStorage.getItem('rememberedRoll'); // Assuming roll number is stored in local storage
 
   // Check if token exists for today
   useEffect(() => {
@@ -24,8 +27,10 @@ export default function AttendanceAdmin() {
         const tokenDoc = await getDoc(doc(db, 'attendance', today));
         if (tokenDoc.exists()) {
           setToken(tokenDoc.data().token);
+          setIsValid(tokenDoc.data().isValid);
         } else {
           setToken('');
+          setIsValid(true);
         }
       } catch (err) {
         console.error('Error fetching token:', err);
@@ -40,13 +45,13 @@ export default function AttendanceAdmin() {
 
   // Update URL when token changes
   useEffect(() => {
-    if (token) {
-      const attendanceUrl = `${window.location.origin}/attendance/mark?date=${today}&token=${token}`;
+    if (token && isValid) {
+      const attendanceUrl = `${window.location.origin}/attendance/mark?date=${today}&token=${token}&isValid=true`;
       setUrl(attendanceUrl);
     } else {
       setUrl('');
     }
-  }, [token, today]);
+  }, [token, today, isValid]);
 
   const generateToken = async () => {
     setGenerating(true);
@@ -57,15 +62,37 @@ export default function AttendanceAdmin() {
       await setDoc(doc(db, 'attendance', today), {
         token: newToken,
         createdAt: new Date(),
+        isValid: true,
+        adminRollNumber: adminRollNumber, // Store admin roll number
       });
       
       setToken(newToken);
+      setIsValid(true);
       toast.success('Token generated successfully');
     } catch (err) {
       console.error('Token generation failed:', err);
       toast.error('Failed to generate token');
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const closeToken = async () => {
+    const confirmClose = window.confirm("Are you sure you want to close today's token?");
+    if (confirmClose) {
+      try {
+        await setDoc(doc(db, 'attendance', today), {
+          token: token,
+          createdAt: new Date(),
+          isValid: false,
+          adminRollNumber: adminRollNumber, // Keep the admin roll number
+        });
+        setIsValid(false);
+        toast.success('Token closed successfully');
+      } catch (err) {
+        console.error('Failed to close token:', err);
+        toast.error('Failed to close token');
+      }
     }
   };
 
@@ -96,7 +123,7 @@ export default function AttendanceAdmin() {
             <div className="flex justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
             </div>
-          ) : token ? (
+          ) : token && isValid ? (
             <div className="space-y-6">
               <div className="flex flex-col items-center">
                 <div className="bg-white p-4 rounded-lg border border-zinc-200">
@@ -108,14 +135,28 @@ export default function AttendanceAdmin() {
               </div>
 
               <div className="mt-4 bg-zinc-50 dark:bg-zinc-700/30 rounded-lg p-4 flex items-center justify-between">
-                <p className="text-sm font-mono break-all">{url}</p>
+                <p className="text-sm font-mono break-all">{showUrl ? url : 'URL hidden'}</p>
                 <button
                   onClick={copyToClipboard}
                   className="ml-4 p-2 rounded-lg bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600"
                 >
                   <Copy className="h-5 w-5" />
                 </button>
+                <button
+                  onClick={() => setShowUrl(!showUrl)}
+                  className="ml-4 p-2 rounded-lg bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600"
+                >
+                  {showUrl ? 'Hide URL' : 'Show URL'}
+                </button>
               </div>
+
+              <button
+                onClick={closeToken}
+                className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-6 rounded-lg shadow-md hover:shadow-lg transition-all flex items-center mx-auto"
+              >
+                <XCircle className="h-5 w-5 mr-2" />
+                Close Token
+              </button>
             </div>
           ) : (
             <div className="text-center py-12">
